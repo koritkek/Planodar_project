@@ -1,0 +1,86 @@
+# =====================================================================
+# docker-compose.yml - spusteni cele aplikace jednim prikazem:
+#     docker compose up
+# Spusti tri kontejnery:
+#   web        - PHP + Apache s aplikaci      -> http://localhost:8080
+#   db         - databaze MariaDB (jako XAMPP)
+#   phpmyadmin - sprava databaze v prohlizeci -> http://localhost:8081
+# Hesla nize jsou jen pro lokalni vyvoj, na verejny server nepatri.
+# =====================================================================
+
+# Nazev projektu (jinak by ho Docker odvodil z nazvu slozky bez diakritiky: "plnod")
+name: planodar
+
+services:
+  # ----- Webovy server s aplikaci -----
+  web:
+    # Obraz se sestavi podle souboru Dockerfile v teto slozce
+    build: .
+    # Port 8080 na pocitaci -> port 80 v kontejneru (Apache)
+    ports:
+      - "8080:80"
+    # Promenne prostredi - cte je db.php (getenv)
+    environment:
+      DB_HOST: db                 # Nazev databazove sluzby nize (Docker ho prelozi na adresu)
+      DB_USER: planodar           # Uzivatel databaze
+      DB_PASS: planodar_heslo     # Heslo uzivatele
+      DB_NAME: planodar           # Nazev databaze
+      TZ: Europe/Prague           # Casove pasmo kontejneru
+      # API klic pro AI: staci ho mit v config.php, nebo v souboru .env vedle tohoto
+      # souboru (radek GROQ_API_KEY=gsk_...). Prazdna hodnota se ignoruje.
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    # Slozka projektu se pripoji primo do kontejneru -> zmeny v kodu jsou videt hned
+    volumes:
+      - ./:/var/www/html
+    # Web se spusti az ve chvili, kdy je databaze pripravena
+    depends_on:
+      db:
+        condition: service_healthy
+    # Po restartu pocitace / Dockeru se kontejner spusti znovu (dokud ho nezastavis)
+    restart: unless-stopped
+
+  # ----- Databaze -----
+  db:
+    # Oficialni obraz MariaDB (stejna databaze, jakou pouziva XAMPP)
+    image: mariadb:11.4
+    # Pri prvnim startu se vytvori databaze a uzivatel s temito udaji
+    environment:
+      MARIADB_DATABASE: planodar          # Nazev databaze
+      MARIADB_USER: planodar              # Uzivatel pro aplikaci
+      MARIADB_PASSWORD: planodar_heslo    # Jeho heslo (stejne jako DB_PASS vyse)
+      MARIADB_ROOT_PASSWORD: root_heslo   # Heslo spravce (root)
+      TZ: Europe/Prague                   # Casove pasmo databaze (NOW() vraci cesky cas)
+    volumes:
+      # Data databaze se ukladaji do pojmenovaneho svazku -> prezijou restart i smazani kontejneru
+      - db-data:/var/lib/mysql
+      # setup.sql se spusti automaticky pri uplne prvnim startu (prazdna databaze)
+      - ./setup.sql:/docker-entrypoint-initdb.d/01-setup.sql:ro
+    # Kontrola, ze databaze uz prijima spojeni (na ni ceka sluzba web)
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s      # Kontrola kazdych 5 sekund
+      timeout: 5s       # Jedna kontrola smi trvat max. 5 sekund
+      retries: 30       # Po 30 neuspesnych pokusech se databaze oznaci za nefunkcni
+    # Automaticky restart
+    restart: unless-stopped
+
+  # ----- phpMyAdmin (nepovinny pomocnik pro prohlizeni databaze) -----
+  phpmyadmin:
+    # Oficialni obraz phpMyAdmin
+    image: phpmyadmin:5
+    # Port 8081 na pocitaci -> port 80 v kontejneru
+    ports:
+      - "8081:80"
+    # K jake databazi se pripojit (prihlaseni: planodar / planodar_heslo)
+    environment:
+      PMA_HOST: db
+    # Spustit az po databazi
+    depends_on:
+      - db
+    # Automaticky restart
+    restart: unless-stopped
+
+# Pojmenovany svazek pro data databaze (Docker ho spravuje sam)
+volumes:
+  db-data:

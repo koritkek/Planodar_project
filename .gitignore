@@ -1,0 +1,5 @@
+# Soubory, ktere se nikdy nenahraji na GitHub
+# Lokalni nastaveni s API klicem a hesly
+config.php
+# Lokalni promenne prostredi pro Docker (muze obsahovat API klic)
+.env

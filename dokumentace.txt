@@ -1,0 +1,348 @@
+PLÁNODÁŘ – záznam o vývoji
+==========================
+
+Cíl
+---
+Webový kalendář s uživatelskými účty a umělou inteligencí. Uživatel si
+zapisuje události a AI (zdarma přes Groq, volitelně Claude) mu k nim navrhne
+přípravné podúkoly – např. k události „Pohřeb“ úkoly „Vyčistit oblek“
+a „Koupit květinu“ – i s termínem, odhadem času a označením důležitosti.
+Podúkoly jde odškrtávat, přidávat ručně, přejmenovat, hvězdičkovat a mazat.
+
+Použité technologie
+-------------------
+- HTML, Tailwind CSS (CDN) a vlastní CSS – vzhled
+- čistý JavaScript (bez knihoven) – chování kalendáře, AJAX přes fetch()
+- PHP 8.2 + MySQL/MariaDB (procedurální mysqli, prepared statements)
+- umělá inteligence přes HTTPS pomocí rozšíření cURL – žádná knihovna ani
+  Composer nejsou potřeba: Groq (zdarma, výchozí) nebo Claude API (placené)
+- písma Google Fonts: Caveat (ručně psané nadpisy), Bricolage Grotesque (text)
+- běh lokálně na XAMPP, v Dockeru, nebo na internetu:
+  hosting Render (Docker, zdarma) + databáze Aiven for MySQL (zdarma)
+
+
+Nastavení
+---------
+Nastavení se čte ve třech vrstvách (konfigurace.php), poslední vyhrává:
+  1) výchozí hodnoty – fungují v XAMPP bez úprav,
+  2) config.php – lokální soubor (XAMPP); není v gitu (.gitignore),
+  3) proměnné prostředí – Docker a Render; seznam je v .env.example.
+
+Nejdůležitější volby (v závorce název proměnné prostředí):
+- groq_api_key        (GROQ_API_KEY)       – API klíč pro Groq (zdarma, „gsk_…“)
+- anthropic_api_key   (ANTHROPIC_API_KEY)  – API klíč pro Claude (placený, „sk-ant-…“)
+- ai_poskytovatel     (AI_POSKYTOVATEL)    – auto / groq / claude (auto = přednost
+                                             má Groq, když je jeho klíč vyplněný)
+- ai_model            (AI_MODEL)           – prázdné = výchozí model poskytovatele
+- ai_effort           (AI_EFFORT)          – výchozí low
+- ai_limit_za_hodinu  (AI_LIMIT_ZA_HODINU) – generování na uživatele / hodinu (20)
+- ai_limit_za_den     (AI_LIMIT_ZA_DEN)    – generování všech dohromady / 24 h (200)
+- db_host, db_port, db_user, db_heslo, db_nazev (DB_HOST, DB_PORT, DB_USER,
+  DB_PASS, DB_NAME) – připojení k databázi
+- db_ssl, db_ssl_ca   (DB_SSL, DB_SSL_CA)  – šifrované spojení s cloudovou
+  databází a certifikát autority pro ověření serveru
+- registrace_povolena (REGISTRACE_POVOLENA) – 0 = nové účty nejdou založit
+- duveryhodna_proxy   (DUVERYHODNA_PROXY)  – 1 = běh za proxy hostingu (Render):
+  aplikace pak pozná HTTPS a skutečnou IP návštěvníka z hlaviček proxy
+
+API klíč tak nikdy není v kódu na GitHubu, v Docker obrazu ani v prohlížeči.
+
+
+AI – poskytovatelé, modely a úspora tokenů
+------------------------------------------
+Aplikace umí dva poskytovatele AI; vybírá se podle vyplněného klíče:
+
+1) Groq – ZDARMA (výchozí)
+   Model openai/gpt-oss-120b (otevřený model od OpenAI provozovaný firmou
+   Groq). Bezplatný tarif bez platební karty, cca 1000 požadavků
+   a 200 000 tokenů denně, 30 požadavků za minutu – na desítky až stovky
+   generování denně. Podporuje striktní strukturovaný výstup (JSON schéma),
+   takže odpověď má vždy správný tvar. Volá se formátem OpenAI Chat
+   Completions (POST https://api.groq.com/openai/v1/chat/completions,
+   klíč v hlavičce Authorization: Bearer).
+   Proč ne Gemini od Googlu: podmínky Gemini API dovolují aplikacím
+   pro uživatele v EU (EHP), Švýcarsku a Británii jen placenou verzi.
+
+2) Claude od Anthropicu – placený (volitelný)
+   Model Claude Haiku 5.5 (claude-haiku-5-5), 0,10 $ / 0,50 $ za milion
+   vstupních / výstupních tokenů, zhruba 0,0002 $ za jedno generování.
+   Starší claude-3-5-haiku a claude-3-haiku už Anthropic vyřadil (404).
+
+Úspora tokenů (u obou):
+- minimum přemýšlení (Groq reasoning_effort = low, Claude thinking vypnuté
+  a effort = low), text přemýšlení se nevrací,
+- krátký systémový prompt (cca 500 znaků) a stručná zpráva o události
+  (popis zkrácený na 500 znaků, prázdný popis se vůbec neposílá),
+- strukturovaný výstup – model nepíše žádný zbytečný text,
+- 3 až 5 podúkolů po max. 6 slovech, strop 2048 tokenů,
+- spotřeba tokenů se zapisuje do logu serveru.
+
+Kdyby zvolený model nějaký parametr nepodporoval (přemýšlení, effort,
+JSON schéma), ai.php chybu 400 rozpozná a pošle požadavek znovu bez něj
+(u JSON schématu přepne na obyčejný JSON režim – tvar pak hlídá vlastní
+kontrola odpovědi). Když bezplatný limit Groq dojde (429 s dlouhým
+čekáním), uživatel dostane hlášku „Bezplatný limit AI je teď vyčerpaný“.
+
+
+Databáze (setup.sql)
+--------------------
+- users             – účty: jméno, e-mail (unikátní), hash hesla (Argon2id),
+                      verze_prihlaseni (zvýšení = odhlášení všude), datum registrace
+- events            – události: user_id (vlastník), název, datum, čas, popis
+- subtasks          – přípravné podúkoly: event_id, název, cas (termín),
+                      odhad_minut, dulezite (0/1), splneno (0/1);
+                      vlastníka určuje jejich událost
+- ai_generovani     – kdy kdo generoval (limit za hodinu a za den)
+- prihlaseni_tokeny – tokeny pro „Zůstat přihlášen/a“ (selector + hash validátoru)
+- pokusy_prihlaseni – neúspěšná přihlášení (ochrana proti hádání hesel)
+
+Cizí klíče s ON DELETE CASCADE: smazání účtu smaže jeho události, tokeny
+a záznamy generování; smazání události smaže její podúkoly.
+
+Automatická instalace (schema.php): při prvním požadavku aplikace spustí
+příkazy CREATE TABLE IF NOT EXISTS ze setup.sql a do starší databáze
+doplní nové sloupce (ALTER TABLE). Na hostingu proto není potřeba nic
+importovat ručně. Po úspěchu se do dočasné složky zapíše „značka“, aby se
+kontrola neopakovala při každém požadavku.
+migrace_ucty.sql převede databázi z úplně první verze bez účtů.
+
+
+Soubory projektu
+----------------
+
+konfigurace.php, config.php, config.example.php, .env.example
+  Nastavení aplikace (viz výše). konfigurace.php nastavuje i časové
+  pásmo Europe/Prague.
+
+db.php
+  Připojení k databázi (port, časový limit, šifrování TLS s ověřením
+  certifikátu), nastavení českého času i pro MySQL (SET time_zone)
+  a pomocné funkce pro dotazy s parametry: nactiRadky(), nactiRadek(),
+  zmenData(). Chyby řeší selhaniDatabaze() – detail do logu, uživateli
+  srozumitelná hláška (API jako JSON, stránky jako HTML).
+
+schema.php
+  Automatická instalace a aktualizace tabulek (viz výše).
+
+auth.php
+  Účty: bezpečná session, přihlášení/odhlášení, „Zůstat přihlášen/a“,
+  hashování hesel (Argon2id), CSRF tokeny, omezení pokusů o přihlášení,
+  kontroly vstupů, bezpečnostní hlavičky, HTTPS za proxy.
+
+sablona.php
+  Společné části HTML (hlavička, konec stránky, logo, zprávy). Styly
+  a skripty se načítají s ?v=čas-změny, takže prohlížeč po úpravě hned
+  stáhne novou verzi.
+
+prihlaseni.php / registrace.php / ucet.php / odhlaseni.php / export.php
+  Přihlášení, registrace (lze vypnout), správa účtu (jméno, e-mail, heslo,
+  odhlášení všude, smazání účtu, přehled připravenosti), odhlášení
+  a stažení vlastních dat jako JSON.
+
+formulare.js
+  Vylepšení formulářů: tlačítko „ukázat“ u hesla, ukazatel síly nového
+  hesla, ochrana proti dvojitému odeslání.
+
+index.php + script.js
+  Kalendář (jen pro přihlášené):
+  - měsíční mřížka s animací přepnutí, lístky událostí s počítadlem přípravy,
+  - vyhledávání událostí (také klávesa /), výsledky jde procházet šipkami,
+  - přetažení lístku myší na jiný den = přesun události (s „Zpět“),
+  - detail události: úprava názvu, popisu, data a času tužkou, mazání
+    s potvrzením,
+  - sekce „Příprava“: ukazatel průběhu, „2 z 5 hotovo · zbývá ~40 min“,
+    generování AI, vlastní podúkoly, hvězdička „důležité“, odhad času,
+    přejmenování, mazání s tlačítkem „Zpět“, hromadné akce s potvrzením,
+  - krátká oznámení dole na obrazovce,
+  - klávesové zkratky: N nová událost, / hledat, T dnes, ← → měsíce, Esc,
+  - na mobilu: ťuknutí na den ukáže jeho události pod kalendářem (agenda),
+    kulaté tlačítko „+“ vpravo dole, okna vyjíždějí zdola.
+
+api_zaklad.php
+  Společný základ API: JSON odpovědi, povolené metody, kontrola přihlášení
+  (401) a CSRF tokenu (403), čtení vstupů.
+
+api.php – události
+  - GET  ?rok=&mesic=   → události měsíce včetně počtu podúkolů
+  - GET  ?hledat=text   → vyhledání v názvu a popisu (max. 12 výsledků;
+                          znaky % a _ se v LIKE escapují)
+  - POST                → nová událost
+  - PUT                 → změní jen poslané údaje (název, popis, datum, čas);
+                          při změně data posune termíny podúkolů o stejný
+                          počet dní (v transakci)
+  - DELETE              → smazání (podúkoly smaže databáze)
+
+podukoly.php – přípravné podúkoly
+  - GET    ?event_id=5                 → seznam podúkolů události
+  - POST   {event_id, nahradit}        → AI vygeneruje podúkoly
+  - POST   {event_id, nazev, ...}      → ruční přidání (i „Zpět“ po smazání)
+  - PUT    {id, nazev?, splneno?, dulezite?} → úprava
+  - DELETE {id} / {event_id, vse: true} → smazání jednoho / všech
+  Každý dotaz ověřuje přes JOIN s events, že podúkol patří události
+  přihlášeného uživatele (cizí = 404). AI se volá PŘED změnou databáze –
+  když selže, staré podúkoly zůstanou. Uložení probíhá v transakci se
+  zámkem události (SELECT … FOR UPDATE).
+
+ai.php – komunikace s AI (Groq nebo Claude)
+  Sestaví požadavek pro zvoleného poskytovatele (stejné instrukce i JSON
+  schéma {podukoly: [{nazev, dni_predem, minuty, dulezite}]}, liší se jen
+  tvar požadavku a odpovědi – funkce aiTeloPozadavku a aiTextOdpovedi).
+  Údaje události jsou
+  v tagu <udalost> s pokynem neřídit se případnými instrukcemi v nich
+  (ochrana proti „prompt injection“). Odpověď ověří (stop_reason, JSON,
+  typy), očistí (číslování, tečky, duplicity, délka, max. 8 podúkolů,
+  0–60 dní, odhad 1–1440 minut) a vrátí. Termín podúkolu = datum události
+  minus dny předem (u budoucí události nejdřív dnes).
+
+style.css
+  Vzhled elegantního diáře: čtverečkovaný papír, ručně psané nadpisy,
+  lepicí lístky s hloubkou, vícevrstvé měkké stíny v teplé barvě inkoustu.
+  3D prvky: tlačítka se spodní hranou, která se při stisku zamáčkne;
+  kalendář jako blok listů, pod kterým vykukují další dva; lístky se při
+  najetí „odlepí“. Mikroanimace: položení okna, přepnutí měsíce, fajfka
+  s poskočením, plynulé přeškrtnutí, doplnění ukazatele průběhu, příchod
+  nových podúkolů. Uživatelé s vypnutými animacemi v systému je neuvidí.
+  Mobil (do 640 px, testováno 360–430 px): přeskládaná hlavička, buňky
+  s barevnými proužky místo textu, agenda dne, okna vyjíždějící zdola,
+  ovládací prvky min. 40–44 px, písmo polí 16 px (Safari nezvětšuje
+  stránku), bezpečné okraje pro výřez displeje.
+
+ikona.svg
+  Ikona aplikace v záložce prohlížeče.
+
+.htaccess
+  Zakáže výpis složky a přístup z prohlížeče ke config.php, pomocným PHP
+  souborům, SQL skriptům, dokumentaci, souborům Dockeru a Renderu, .env
+  a složce .git; stylům a skriptům nastaví týdenní cache.
+
+Dockerfile, docker-compose.yml, .dockerignore
+  Lokální spuštění příkazem „docker compose up“: web (http://localhost:8080),
+  db (MariaDB 11.4) a phpMyAdmin (http://localhost:8081). Dockerfile
+  používá i Render: Apache poslouchá na portu z proměnné PORT, nepřiznává
+  verzi PHP ani Apache, produkční php.ini.
+
+render.yaml
+  „Blueprint“ pro Render: webová služba z Dockerfile, tarif free, region
+  Frankfurt, automatické nasazení po každém commitu. Tajné hodnoty
+  (API klíč, údaje k databázi) se nezadávají do souboru – Render se na ně
+  zeptá a uloží je jako proměnné prostředí.
+
+
+Jak části spolupracují
+----------------------
+1. Nepřihlášený návštěvník je přesměrován na prihlaseni.php.
+2. index.php vypíše kalendář a CSRF token; script.js načte události (api.php).
+3. Klik na lístek → detail → script.js načte podúkoly (GET podukoly.php).
+4. Klik na „Vygenerovat podúkoly (AI)“ → POST podukoly.php → ai.php pošle
+   událost na AI (Groq / Claude) → odpověď se ověří a očistí → uloží se do subtasks
+   → vrátí se seznam a vykreslí se pod tlačítkem.
+5. Odškrtnutí / hvězdička / přejmenování / smazání → PUT / DELETE
+   podukoly.php → databáze → aktualizace seznamu, průběhu i lístku.
+6. Přetažení lístku nebo změna data v detailu → PUT api.php → posun
+   události i termínů jejích podúkolů.
+
+
+Nasazení na internet (Render + Aiven)
+-------------------------------------
+1. Aiven (aiven.io): free služba MySQL → z „Connection information“ host,
+   port, user, password a CA certificate.
+2. Groq (console.groq.com): přihlášení → API Keys → Create API Key.
+3. Render (render.com): New → Blueprint → vybrat repozitář z GitHubu →
+   Render načte render.yaml a zeptá se na GROQ_API_KEY, DB_HOST,
+   DB_PORT, DB_USER, DB_PASS a DB_SSL_CA.
+4. Po nasazení aplikace sama vytvoří tabulky (schema.php).
+5. Každý další „git push“ do větve main = automatické nové nasazení.
+Docker není potřeba instalovat: Render si podle Dockerfile sestaví běhové
+prostředí sám. docker-compose.yml slouží jen pro volitelné lokální spuštění
+(na počítači stačí XAMPP).
+Omezení free tarifů: Render po 15 minutách nečinnosti službu uspí (první
+načtení pak trvá asi minutu); Aiven může dlouho nepoužívanou databázi
+vypnout (pošle e-mail, zapne se jedním kliknutím v konzoli).
+
+
+Ošetření chyb AI (co uživatel uvidí)
+------------------------------------
+- chybí klíč → tlačítko je zašedlé; vlastní podúkoly jdou psát dál
+- neplatný klíč (401) → „API klíč pro AI je neplatný…“
+- došel kredit (402) → „Na účtu Anthropic došel kredit…“
+- neznámý/vyřazený model (404) → „Model … není dostupný…“
+- přetížení (429, 529, 5xx) → aplikace to po krátké pauze zkusí ještě
+  jednou; pak „AI je momentálně přetížená. Zkus to prosím za chvíli.“
+- AI neodpoví do 45 s → „AI neodpověděla včas. Zkus to prosím znovu.“
+- není spojení → „Nepodařilo se spojit se službou AI…“
+- AI odmítne (refusal) → „AI odmítla k této události navrhnout podúkoly…“
+- nečekaná odpověď / prázdný návrh → srozumitelná hláška, nic se neuloží
+- limit uživatele (20/h) nebo celé aplikace (200/den) → hláška s důvodem
+Podrobnosti (HTTP kód, typ chyby, request-id, spotřeba tokenů) se zapisují
+do logu serveru, API klíč nikdy.
+
+
+Bezpečnost
+----------
+- Hesla: password_hash() s algoritmem Argon2id (když ho PHP nemá, bcrypt
+  s cost 12); ukládá se jen hash. Starší hashe se při přihlášení samy
+  přepočítají (password_needs_rehash). Falešný hash pro neexistující účet
+  → stejná doba odpovědi, nejde zjistit, které e-maily existují.
+- SQL injection: všechny dotazy s hodnotami přes mysqli_prepare
+  a bind_param; v LIKE se escapují zástupné znaky.
+- XSS: výstup v PHP přes e() (htmlspecialchars), v JS jen textContent;
+  Content-Security-Policy povoluje skripty jen z vlastního webu a z CDN
+  Tailwindu, takže vložený cizí <script> by se nespustil.
+- CSRF: tajný token ve formulářích i v hlavičce požadavků API
+  (porovnání hash_equals) + cookies SameSite=Strict.
+- IDOR (cizí data): každý dotaz obsahuje user_id = ? (u podúkolů přes JOIN
+  s events); cizí událost i podúkol se tváří jako neexistující (404).
+- Session a cookies: HttpOnly, SameSite=Strict, Secure při HTTPS, strict
+  mode, ID jen v cookie, nové ID po přihlášení, odhlášení po 2 h nečinnosti.
+  Kvůli SameSite=Strict se stránka otevřená odkazem z cizího webu jednou
+  sama obnoví (jinak by se uživatel jevil nepřihlášený).
+- „Zůstat přihlášen/a“: selector + hash validátoru, rotace tokenu,
+  zneplatnění při změně hesla a „odhlásit všude“.
+- Hádání hesel: 5 pokusů na e-mail / 20 z IP za 15 minut.
+- Přenos dat: na Renderu HTTPS + HSTS (prohlížeč pak HTTP vůbec nezkusí);
+  spojení s databází šifrované TLS s ověřením certifikátu; s Groq / Claude
+  API HTTPS s ověřením certifikátu.
+- API klíč: jen na serveru (config.php / proměnná prostředí), nikdy se
+  neposílá do prohlížeče, není v gitu, v Docker obrazu ani v logu.
+- Hlavičky: X-Frame-Options DENY, nosniff, Referrer-Policy,
+  Permissions-Policy, Cross-Origin-Opener-Policy; server nepřiznává verzi.
+- Kredit: limit generování na uživatele za hodinu a pro celou aplikaci
+  za den; registraci jde vypnout.
+- Prompt injection: údaje události jsou v promptu označené jako data.
+
+Známá omezení
+- Obnova zapomenutého hesla e-mailem chybí (aplikace neposílá e-maily).
+- Registrace prozradí, že e-mail už má účet.
+- Termín podúkolu navrhuje AI; ručně ho zatím nejde změnit.
+- Tailwind se načítá z CDN (pro produkci by šlo CSS předem sestavit).
+- Přetahování lístků funguje myší; na dotykových displejích se událost
+  přesouvá tužkou u data v detailu.
+
+
+Testování
+---------
+Automatické testy (PowerShell + curl proti Docker verzi):
+- 88 kontrol účtů, událostí a bezpečnosti: instalace do prázdné databáze
+  i doplnění starší databáze, bezpečnostní hlavičky a cookies, chování za
+  proxy (Secure, HSTS), obnovení stránky z cizího odkazu, Argon2id
+  a převod starého bcrypt hashe, CSRF, izolace dat mezi uživateli,
+  vyhledávání, částečná úprava a přesun události, zapamatování přihlášení,
+  blokace hádání hesel, správa účtu, ochrana souborů,
+- 8 kontrol bez API klíče,
+- 85 kontrol podúkolů proti simulovanému Groq API a 87 proti simulovanému
+  Claude API: tvar požadavku (model, klíč v hlavičce, striktní JSON schéma,
+  minimum přemýšlení, strop tokenů), spotřeba tokenů v logu a klíč mimo
+  log, očištění odpovědi, termíny, odhady a důležitost, vlastní podúkoly,
+  hvězdička, „Zpět“, posun termínů při přesunu, izolace mezi uživateli,
+  limity za hodinu i za den a chybové scénáře (401, 402, 404, vyčerpaný
+  bezplatný limit 429 bez zbytečného čekání, přetížení + opakování, model
+  bez parametru přemýšlení, model bez JSON schématu, odmítnutí, příliš
+  dlouhá odpověď, rozbitý JSON, prázdný návrh, timeout, selhání při
+  nahrazení bez ztráty starých podúkolů).
+Ověřeno ručně: port z proměnné PORT (Render), šifrované spojení
+s databází a odmítnutí falešného certifikátu, přetažení lístku, spojení
+se skutečným Groq API z XAMPP (neplatný klíč → srozumitelná hláška).
+Vzhled ověřen na snímcích obrazovky (počítač 1280 px, telefon 360 a 390 px
+emulovaný přes DevTools – bez vodorovného přetékání).
+Skutečné generování vyžaduje platný klíč – bez něj lze ověřit jen
+odpověď „neplatný klíč“.

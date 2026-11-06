@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Ikona Planodare: listek kalendare s krouzkovou vazbou a fajfkou -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff9a5e"/>
+      <stop offset="1" stop-color="#ffb35c"/>
+    </linearGradient>
+  </defs>
+  <!-- List papiru -->
+  <rect x="6" y="10" width="52" height="48" rx="9" fill="#fffaf0" stroke="#2b2118" stroke-opacity=".25" stroke-width="2"/>
+  <!-- Oranzova hlavicka -->
+  <path d="M6 19a9 9 0 0 1 9-9h34a9 9 0 0 1 9 9v5H6z" fill="url(#g)"/>
+  <!-- Krouzky vazby -->
+  <rect x="18" y="5" width="5" height="12" rx="2.5" fill="#2b2118"/>
+  <rect x="41" y="5" width="5" height="12" rx="2.5" fill="#2b2118"/>
+  <!-- Fajfka -->
+  <path d="M21 40l8 8 15-17" fill="none" stroke="#ff5f6d" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

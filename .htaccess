@@ -1,0 +1,28 @@
+# =====================================================================
+# .htaccess - nastaveni Apache pro tuto slozku (plati v XAMPP, Dockeru i na Renderu)
+# =====================================================================
+
+# Zakazeme vypis obsahu slozky, kdyby chybel index.php
+Options -Indexes
+
+# Soubory, ktere nema smysl (ani neni bezpecne) otevirat primo z prohlizece:
+#   config.php, config.example.php - nastaveni (API klic, hesla)
+#   db.php, auth.php, sablona.php, konfigurace.php, schema.php, api_zaklad.php, ai.php
+#                                 - jen se vkladaji do jinych skriptu
+#   *.sql, *.txt, *.md, *.yml     - SQL skripty, dokumentace, nastaveni Dockeru a Renderu
+#   .env, .env.example            - promenne prostredi (mohou obsahovat klice)
+#   Dockerfile, .dockerignore, .gitattributes, .gitignore, .htaccess
+<FilesMatch "^(config|config\.example|db|auth|sablona|konfigurace|schema|api_zaklad|ai)\.php$|\.(sql|txt|md|yml|yaml)$|^\.env|^(Dockerfile|\.dockerignore|\.gitattributes|\.gitignore|\.htaccess)$">
+    Require all denied
+</FilesMatch>
+
+# Slozka .git (historie projektu) se tvari jako neexistujici
+RedirectMatch 404 /\.git
+
+# Styly, skripty a ikonu si prohlizec muze tyden pamatovat (stranky je nacitaji
+# s ?v=cas-zmeny, takze po uprave souboru se hned stahne nova verze)
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js|svg)$">
+        Header set Cache-Control "public, max-age=604800"
+    </FilesMatch>
+</IfModule>

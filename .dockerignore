@@ -1,0 +1,20 @@
+# Soubory, ktere se NEkopiruji do obrazu webu (prikaz COPY v Dockerfile)
+# Historie gitu - do obrazu nepatri
+.git
+# Soubory pro Docker a hosting samotny
+Dockerfile
+docker-compose.yml
+.dockerignore
+render.yaml
+# Vlastni nastaveni a tajne udaje se do obrazu nesmi zapect
+# (lokalne ho kontejner vidi diky pripojene slozce, na Renderu jsou udaje v promennych prostredi)
+config.php
+.env
+.env.*
+.gitignore
+# Migraci starsi databaze spousti clovek rucne, ne web
+# (setup.sql v obrazu byt musi - podle nej schema.php vytvari tabulky)
+migrace_ucty.sql
+# Dokumentace
+dokumentace.txt
+*.md

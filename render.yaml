@@ -1,0 +1,60 @@
+# =====================================================================
+# render.yaml - "Blueprint" pro hosting Render (https://render.com)
+#
+# Render podle tohoto souboru sam zalozi webovou sluzbu: sestavi Docker
+# obraz podle Dockerfile a spusti ho. Po kazdem "git push" do vetve main
+# se aplikace automaticky znovu sestavi a nasadi (autoDeployTrigger).
+#
+# Tajne hodnoty (sync: false) se NEpisou sem - Render se na ne zepta
+# pri zalozeni a ulozi je jako promenne prostredi (Environment).
+# Databazi MySQL poskytuje zdarma Aiven (https://aiven.io) - postup je
+# v dokumentace.txt a v .env.example.
+# =====================================================================
+services:
+  - type: web
+    # Nazev sluzby (bude i v adrese planodar-xxxx.onrender.com)
+    name: planodar
+    # Sestaveni z Dockerfile v koreni repozitare
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Bezplatny tarif (po 15 minutach necinnosti se uspi, prvni nacteni pak trva asi minutu)
+    plan: free
+    # Datove centrum ve Frankfurtu - nejblize Cesku
+    region: frankfurt
+    # Novy commit ve vetvi = nove nasazeni
+    autoDeployTrigger: commit
+    envVars:
+      # ----- Tajne udaje (Render se na ne zepta pri zalozeni) -----
+      # API klic pro AI zdarma od Groq (console.groq.com/keys, zacina gsk_)
+      # (placeny Claude jde pridat pozdeji v Environment jako ANTHROPIC_API_KEY)
+      - key: GROQ_API_KEY
+        sync: false
+      # Udaje k databazi z Aiven (Service overview -> Connection information)
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASS
+        sync: false
+      # Certifikat autority databaze (Aiven -> CA certificate -> Show, zkopirovat cely text)
+      - key: DB_SSL_CA
+        sync: false
+      # ----- Bezne hodnoty (nejsou tajne) -----
+      # Vychozi databaze na Aiven se jmenuje defaultdb
+      - key: DB_NAME
+        value: defaultdb
+      # Spojeni s databazi pres internet musi byt sifrovane
+      - key: DB_SSL
+        value: "1"
+      # Render posila pozadavky pres svou proxy (HTTPS, IP adresa navstevnika)
+      - key: DUVERYHODNA_PROXY
+        value: "1"
+      # Registrace novych uctu (po vytvoreni vlastniho uctu muzes nastavit na 0)
+      - key: REGISTRACE_POVOLENA
+        value: "1"
+      # Pojistka kreditu: max. pocet AI generovani za den pro vsechny uzivatele
+      - key: AI_LIMIT_ZA_DEN
+        value: "200"

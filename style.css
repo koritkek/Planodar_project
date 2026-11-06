@@ -1,0 +1,2229 @@
+/* =====================================================================
+   style.css - vlastni vzhled aplikace Planodar
+   Napad: elegantni diar - ctverecovany papir, rucne psane nadpisy,
+   udalosti jako barevne lepici listky. Hloubku dela nekolik vrstev
+   mekkych teplych stinu (zadne tvrde cerne stiny) a "hmatova" tlacitka
+   se spodni hranou, ktera se pri stisku zamackne (3D efekt).
+   Tailwind se stara hlavne o rozlozeni (flex, grid, mezery),
+   barvy, pisma, stiny a animace jsou definovane zde.
+
+   Pozn.: tlacitka maji selektor s nazvem prvku (button.xxx), protoze
+   Tailwind CDN vklada svuj reset [type='button'] { background: none }
+   AZ ZA tento soubor a pri stejne specificite by vyhral.
+   ===================================================================== */
+
+/* Trida "hidden" (prepina ji script.js) musi skryt prvek VZDY - i kdyz ma
+   vlastni pravidlo s vyssi prioritou, napr. button.btn-ai { display: flex } */
+.hidden {
+    display: none !important;
+}
+
+/* ---------------------------------------------------------------------
+   Promenne - barvy, stiny a krivky animaci na jednom miste
+   --------------------------------------------------------------------- */
+:root {
+    /* Barva "inkoustu" - teple tmave hneda misto ciste cerne */
+    --inkoust: #2b2118;
+    /* Tlumena barva tuzky (vedlejsi texty) */
+    --tuzka: #7a6a5c;
+    /* Barva papiru */
+    --papir: #fffaf0;
+    /* Barva linek ctverecovaneho papiru */
+    --linka: rgba(96, 140, 190, 0.16);
+    /* Hlavni gradient aplikace: jemny posun z teple oranzove (vlevo) do svetlejsi merunkove (vpravo) */
+    --gradient-hlavni: linear-gradient(100deg, #ff9a5e 0%, #ffb35c 100%);
+    /* Barva zvyrazneni (kolecko kolem dnesniho dne, odkazy) */
+    --zvyrazneni: #ff5f6d;
+    /* Zelena "hotovo" */
+    --hotovo: #2e9b6a;
+    /* Tenky obrys - pruhledna hneda, aby ladila s papirem */
+    --okraj: rgba(43, 33, 24, 0.12);
+    /* Vyraznejsi obrys pro vstupni pole */
+    --okraj-pole: rgba(43, 33, 24, 0.2);
+    /* Stiny: vzdy nekolik vrstev v teple barve inkoustu
+       (ostry kontaktni stin u okraje + postupne sirsi a jemnejsi stiny pod nim) */
+    --stin-1: 0 1px 1px rgba(43, 33, 24, 0.06), 0 2px 4px rgba(43, 33, 24, 0.06);
+    --stin-2: 0 1px 2px rgba(43, 33, 24, 0.06), 0 4px 8px rgba(43, 33, 24, 0.07), 0 12px 24px -8px rgba(43, 33, 24, 0.14);
+    --stin-3: 0 1px 2px rgba(43, 33, 24, 0.05), 0 8px 16px -4px rgba(43, 33, 24, 0.1), 0 24px 48px -12px rgba(43, 33, 24, 0.22);
+    --stin-okno: 0 2px 6px rgba(43, 33, 24, 0.08), 0 18px 40px -10px rgba(43, 33, 24, 0.3), 0 40px 90px -20px rgba(43, 33, 24, 0.35);
+    /* Jemna barevna "aura" kolem aktivniho prvku (fokus) */
+    --ring: 0 0 0 3px rgba(255, 95, 109, 0.22);
+    /* Krivka animaci: rychly start, mekke dobrzdeni (prirozeny pohyb) */
+    --pruzina: cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* Krivka s lehkym "prestrelem" (male poskoceni na konci) */
+    --pruzina-skok: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Prirozena velikost prvku vcetne okraju (snazsi pocitani sirek na mobilu) */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+/* Bez blikajiciho modreho zvyrazneni pri tuknuti na mobilu */
+html {
+    -webkit-tap-highlight-color: transparent;
+    /* Mobilni prohlizec nesmi sam zvetsovat pismo pri otoceni */
+    -webkit-text-size-adjust: 100%;
+}
+
+/* ---------------------------------------------------------------------
+   Pozadi stranky - ctverecovany papir
+   --------------------------------------------------------------------- */
+.papir {
+    /* Zakladni barva papiru (kdyby se gradient nezobrazil) */
+    background-color: #fdf5e6;
+    /* Vrstvy pozadi (prvni je nahore):
+       1) a 2) vodorovne a svisle linky = ctverecky,
+       3) velmi jemny prechod barvy papiru shora dolu */
+    background-image:
+        linear-gradient(var(--linka) 1px, transparent 1px),
+        linear-gradient(90deg, var(--linka) 1px, transparent 1px),
+        linear-gradient(180deg, #fef7ea, #fcf1e0);
+    /* Velikost ctverecku 24 px, prechod pres celou plochu */
+    background-size: 24px 24px, 24px 24px, 100% 100%;
+    /* Pozadi zustava na miste pri rolovani */
+    background-attachment: fixed;
+    /* Barva textu */
+    color: var(--inkoust);
+    /* Zakladni pismo aplikace (s nahradnimi pismy, kdyby se nenacetlo) */
+    font-family: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+    /* Hezci vykresleni pisma */
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+/* Otevrene modalni okno: stranka pod nim se neroluje */
+body.modal-otevreny {
+    overflow: hidden;
+}
+
+/* Oznaceny text v barve zvyraznovace */
+::selection {
+    background: rgba(255, 214, 102, 0.6);
+}
+
+/* ---------------------------------------------------------------------
+   Horni lista (vyhledavani, ucet) a hlavicka
+   --------------------------------------------------------------------- */
+
+/* Lista nad hlavickou: vyhledavani vlevo, ucet vpravo */
+.horni-lista {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
+    margin-bottom: 1.25rem;
+}
+
+/* Hlavicka: nazev vlevo, ovladani mesicu vpravo */
+.hlavicka-aplikace {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1.25rem 1.5rem;
+    margin-bottom: 1.75rem;
+}
+
+/* Ovladani mesicu v jedne rade */
+.ovladani-mesicu {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+/* Nazev aplikace "Plánodář" */
+.nadpis-app {
+    /* Rucne psane pismo */
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    /* Velka tucna velikost */
+    font-size: 4rem;
+    font-weight: 700;
+    /* Mensi vyska radku, at nadpis nezabira zbytecne misto */
+    line-height: 1.1;
+    /* Odsazeni nahore a vpravo - gradient se kresli jen uvnitr prvku, bez nej by se
+       oriznul hacek nad "r" a konec posledniho pismene */
+    padding: 0.15em 0.1em 0 0;
+    /* Text vyplneny gradientem: gradient je pozadi, ktere se "orizne" podle pismen */
+    background: var(--gradient-hlavni);
+    -webkit-background-clip: text;
+    background-clip: text;
+    /* Samotna barva textu je pruhledna, aby byl videt gradient */
+    color: transparent;
+    /* Jemny stin pod pismem = inkoust trochu "sedi" na papire (drop-shadow respektuje tvar pismen) */
+    filter: drop-shadow(0 2px 1px rgba(230, 110, 50, 0.18));
+    /* Lehke natoceni - jako kdyz se pise rukou */
+    transform: rotate(-2deg);
+    /* Natoceni nerozbije rozlozeni okolnich prvku */
+    display: inline-block;
+}
+
+/* Podtitulek pod nazvem aplikace */
+.podtitulek {
+    /* Rucne psane pismo */
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 1.4rem;
+    /* Tlumena barva jako tuzka */
+    color: var(--tuzka);
+    /* Odsazeni zleva, at je to pod nadpisem "pres ruku" */
+    margin-left: 1.5rem;
+}
+
+/* Nazev zobrazeneho mesice, napr. "Říjen 2026" */
+.nadpis-mesice {
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1.1;
+    /* Pevna sirka, at tlacitka pri zmene mesice "neposkakuji" */
+    min-width: 11rem;
+    text-align: center;
+}
+
+/* Text mesice uvnitr nadpisu - nese tahy zvyraznovace */
+.zvyraznovac {
+    /* Pozice relative - podle ni se umisti tahy zvyraznovace (::before, ::after) */
+    position: relative;
+    /* inline-block = sirka presne podle textu, tah tedy nepresahuje do prazdna */
+    display: inline-block;
+    /* Vlastni vrstva: tahy se schovaji ZA text, ale zustanou PRED pozadim stranky */
+    isolation: isolate;
+}
+
+/* Zvyraznovac - dva tahy pres sebe, jako kdyz se prejede dvakrat rukou */
+.zvyraznovac::before,
+.zvyraznovac::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    /* Barva se "michat" s papirem jako skutecny inkoust (prekryv = tmavsi misto) */
+    mix-blend-mode: multiply;
+    pointer-events: none;
+}
+
+/* Hlavni tah zvyraznovace */
+.zvyraznovac::before {
+    left: -0.25em;
+    right: -0.15em;
+    bottom: 0.22em;
+    height: 0.55em;
+    /* Svetle zluta; konce jsou slabsi a uprostred ruzne hustoty jako skutecny fix */
+    background: linear-gradient(90deg,
+        rgba(255, 236, 110, 0.25) 0%,
+        rgba(255, 236, 110, 0.55) 4%,
+        rgba(255, 236, 110, 0.45) 35%,
+        rgba(255, 236, 110, 0.6) 70%,
+        rgba(255, 236, 110, 0.5) 96%,
+        rgba(255, 236, 110, 0.2) 100%);
+    /* Nepravidelne zaoblene konce = seriznuty hrot fixu */
+    border-radius: 0.15em 0.4em 0.2em 0.5em / 0.4em 0.2em 0.5em 0.2em;
+    transform: rotate(-1.2deg) skewX(-14deg);
+}
+
+/* Druhy, kratsi a slabsi tah */
+.zvyraznovac::after {
+    left: 0.4em;
+    right: 0.6em;
+    bottom: 0.38em;
+    height: 0.22em;
+    background: rgba(255, 230, 90, 0.35);
+    border-radius: 0.3em 0.1em 0.3em 0.1em;
+    transform: rotate(0.6deg) skewX(-14deg);
+}
+
+/* Panel prihlaseneho uzivatele */
+.uzivatel-panel {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 1.35rem;
+    color: var(--tuzka);
+    /* Panel se nesmi zmacknout pod vyhledavanim */
+    margin-left: auto;
+}
+
+/* ---------------------------------------------------------------------
+   Vyhledavani
+   --------------------------------------------------------------------- */
+
+/* Obal pole (lupa vlevo, klavesa vpravo, vysledky pod polem) */
+.hledani {
+    position: relative;
+    flex: 1 1 18rem;
+    max-width: 24rem;
+}
+
+/* Lupa uvnitr pole */
+.hledani-ikona {
+    position: absolute;
+    left: 0.85rem;
+    top: 50%;
+    width: 1.1rem;
+    height: 1.1rem;
+    transform: translateY(-50%);
+    color: var(--tuzka);
+    pointer-events: none;
+}
+
+/* Samotne pole - zaobleny "stitek" s vnitrnim stinem (vypada vtlacene do papiru) */
+input.pole-hledat {
+    width: 100%;
+    height: 2.75rem;
+    padding: 0 2.6rem 0 2.5rem;
+    border: 1px solid var(--okraj-pole);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: inset 0 1px 2px rgba(43, 33, 24, 0.08);
+    /* 16 px = mobilni Safari pri kliknuti stranku nezvetsuje */
+    font-size: 1rem;
+    color: var(--inkoust);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+/* Vychozi modry krizek prohlizece schovame (k papiru neladi; pole vymaze klavesa Escape) */
+input.pole-hledat::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+/* Text nastinku v poli */
+input.pole-hledat::placeholder {
+    color: #a3968a;
+}
+
+/* Aktivni pole */
+input.pole-hledat:focus {
+    outline: none;
+    background: #ffffff;
+    border-color: var(--zvyrazneni);
+    box-shadow: inset 0 1px 2px rgba(43, 33, 24, 0.06), var(--ring);
+}
+
+/* Napoveda klavesy "/" vpravo v poli (pri psani zmizi) */
+.hledani-klavesa {
+    position: absolute;
+    right: 0.8rem;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+/* Pri psani se napoveda schova */
+.pole-hledat:focus ~ .hledani-klavesa,
+.pole-hledat:not(:placeholder-shown) ~ .hledani-klavesa {
+    opacity: 0;
+}
+
+/* Klavesa (napoveda zkratek) - mala 3D klavesa */
+kbd.klavesa {
+    display: inline-block;
+    min-width: 1.4em;
+    padding: 0.05em 0.35em;
+    font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+    font-size: 0.75em;
+    font-weight: 700;
+    line-height: 1.4;
+    text-align: center;
+    color: var(--tuzka);
+    background: linear-gradient(180deg, #ffffff, #f4ece0);
+    border: 1px solid rgba(43, 33, 24, 0.15);
+    border-radius: 5px;
+    /* Spodni hrana klavesy */
+    box-shadow: 0 2px 0 rgba(43, 33, 24, 0.12);
+    transition: opacity 0.15s ease;
+}
+
+/* Seznam vysledku - list papiru pod polem */
+.vysledky-hledani {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 0.5rem);
+    left: 0;
+    right: 0;
+    max-height: min(60vh, 24rem);
+    overflow-y: auto;
+    padding: 0.4rem;
+    background: var(--papir);
+    border: 1px solid var(--okraj);
+    border-radius: 14px;
+    box-shadow: var(--stin-3);
+    animation: vyjeti-dolu 0.16s var(--pruzina);
+}
+
+/* Jeden vysledek */
+.vysledek {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.5rem 0.75rem 0.5rem 0.9rem;
+    border-radius: 10px;
+    cursor: pointer;
+    /* Barevny prouzek vlevo podle barvy listku */
+    border-left: 4px solid #ffe486;
+    transition: background-color 0.12s ease;
+}
+
+/* Barvy prouzku podle barvy listku udalosti */
+.vysledek.barva-1 { border-left-color: #ffc0cf; }
+.vysledek.barva-2 { border-left-color: #b8ebd6; }
+.vysledek.barva-3 { border-left-color: #c2defb; }
+
+/* Najeti mysi a oznaceni sipkami */
+.vysledek:hover,
+.vysledek[aria-selected="true"] {
+    background-color: rgba(255, 214, 102, 0.25);
+}
+
+/* Nazev vysledku */
+.vysledek-nazev {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Datum vysledku */
+.vysledek-kdy {
+    font-size: 0.8rem;
+    color: var(--tuzka);
+}
+
+/* Informace "Nic jsem nenašel." */
+.vysledek-info {
+    padding: 0.6rem 0.8rem;
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 1.25rem;
+    color: var(--tuzka);
+}
+
+/* ---------------------------------------------------------------------
+   Tlacitka - "hmatova" 3D tlacitka se spodni hranou
+   Princip: box-shadow 0 3px 0 kresli pod tlacitkem pevnou hranu (jako bok
+   klavesy). Pri najeti se tlacitko zvedne (hrana se zvetsi), pri stisku
+   se posune dolu a hrana skoro zmizi - vypada to, ze se zamacklo.
+   --------------------------------------------------------------------- */
+button.btn,
+a.btn {
+    /* Barva spodni hrany (kazda varianta tlacitka si ji meni) */
+    --hrana: rgba(43, 33, 24, 0.14);
+    /* Text a ikona vedle sebe, na stredu */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    /* Odkaz bez podtrzeni */
+    text-decoration: none;
+    /* Minimalni vyska 44 px = pohodlne trefitelne prstem */
+    min-height: 2.75rem;
+    padding: 0.5rem 1.1rem;
+    /* Tenky jemny obrys a zaobleni */
+    border: 1px solid rgba(43, 33, 24, 0.13);
+    border-radius: 12px;
+    /* Papirove bile pozadi se svetlem shora */
+    background: linear-gradient(180deg, #ffffff 0%, #fbf6ee 100%);
+    color: var(--inkoust);
+    font-weight: 600;
+    line-height: 1.2;
+    /* Vrstvy: odlesk nahore uvnitr, spodni hrana, mekky stin pod tlacitkem */
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.9),
+        0 3px 0 var(--hrana),
+        0 5px 12px -3px rgba(43, 33, 24, 0.18);
+    /* Text nejde omylem oznacit dlouhym podrzenim (mobil) */
+    user-select: none;
+    cursor: pointer;
+    /* Plynuly posun a zmena stinu */
+    transition: transform 0.14s var(--pruzina), box-shadow 0.14s var(--pruzina), filter 0.14s ease;
+}
+
+/* Najeti mysi: tlacitko se zvedne (jen na zarizenich s mysi - na mobilu by zustalo "viset") */
+@media (hover: hover) {
+    button.btn:not(:disabled):hover,
+    a.btn:hover {
+        transform: translateY(-1px);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.9),
+            0 4px 0 var(--hrana),
+            0 10px 20px -6px rgba(43, 33, 24, 0.24);
+    }
+}
+
+/* Stisk: tlacitko se zamackne */
+button.btn:not(:disabled):active,
+a.btn:active {
+    transform: translateY(2px);
+    box-shadow:
+        inset 0 1px 2px rgba(43, 33, 24, 0.1),
+        0 1px 0 var(--hrana),
+        0 2px 4px -1px rgba(43, 33, 24, 0.16);
+    transition-duration: 0.05s;
+}
+
+/* Ovladani klavesnici - viditelna jemna aura kolem tlacitka */
+button.btn:focus-visible,
+a.btn:focus-visible {
+    outline: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.9),
+        0 3px 0 var(--hrana),
+        var(--ring);
+}
+
+/* Zablokovane tlacitko (napr. behem ukladani) */
+button.btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+/* Male tlacitko (formulare uvnitr detailu) */
+button.btn-maly {
+    min-height: 2.5rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 10px;
+}
+
+/* Hlavni (dulezite) tlacitko - oranzovy gradient s oranzovou hranou */
+button.btn-hlavni {
+    --hrana: #e0763c;
+    /* Odlesk shora pres hlavni gradient */
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 55%),
+        var(--gradient-hlavni);
+    color: #ffffff;
+    /* Tmavsi stin textu - bily text na svetle oranzove by jinak byl spatne citelny */
+    text-shadow: 0 1px 1px rgba(150, 60, 20, 0.45);
+    border-color: rgba(214, 102, 48, 0.55);
+}
+
+/* Tlacitko "Smazat" v detailu udalosti - bile, jen s cervenym textem (nenapadne) */
+button.btn-smazat {
+    color: #b3261e;
+}
+
+/* Nebezpecna akce (opravdove smazani) - cervene tlacitko s tmave cervenou hranou */
+button.btn-nebezpeci {
+    --hrana: #a32626;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 55%),
+        linear-gradient(100deg, #d93a3a 0%, #ec5b5b 100%);
+    color: #ffffff;
+    text-shadow: 0 1px 1px rgba(90, 10, 10, 0.4);
+    border-color: rgba(163, 38, 38, 0.6);
+}
+
+/* Ctvercova tlacitka se sipkami */
+button.btn-sipka {
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+}
+
+/* Samotna SVG sipka uvnitr tlacitka */
+.btn-sipka svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+/* Tlacitko "+" u noveho podukolu */
+button.btn-plus {
+    width: 2.5rem;
+    padding: 0;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+
+/* Tlacitka formulare zarovnana doprava (na mobilu pres celou sirku) */
+.tlacitka-formulare {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding-top: 0.25rem;
+}
+
+/* Kulate tlacitko "+" vpravo dole - jen na mobilu (viz konec souboru) */
+button.fab {
+    --hrana: #e0763c;
+    display: none;
+    position: fixed;
+    z-index: 30;
+    /* Odsazeni od okraje + bezpecna zona (vyrez displeje, ovladaci lista iPhonu) */
+    right: calc(1.1rem + env(safe-area-inset-right));
+    bottom: calc(1.1rem + env(safe-area-inset-bottom));
+    width: 3.75rem;
+    height: 3.75rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid rgba(214, 102, 48, 0.55);
+    background:
+        radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 55%),
+        var(--gradient-hlavni);
+    color: #ffffff;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+        0 4px 0 var(--hrana),
+        0 12px 24px -6px rgba(214, 102, 48, 0.55);
+    transition: transform 0.14s var(--pruzina), box-shadow 0.14s var(--pruzina);
+}
+
+/* Plus v kulatem tlacitku */
+button.fab svg {
+    width: 1.6rem;
+    height: 1.6rem;
+    filter: drop-shadow(0 1px 1px rgba(150, 60, 20, 0.4));
+}
+
+/* Stisk kulateho tlacitka */
+button.fab:active {
+    transform: translateY(3px);
+    box-shadow:
+        inset 0 1px 2px rgba(150, 60, 20, 0.2),
+        0 1px 0 var(--hrana),
+        0 4px 10px -4px rgba(214, 102, 48, 0.5);
+}
+
+/* ---------------------------------------------------------------------
+   Kalendar
+   --------------------------------------------------------------------- */
+
+/* Obal celeho kalendare - list papiru, pod kterym "vykukuji" dalsi dva listy
+   (stinem s posunem a zapornym roztazenim vzniknou okraje listu pod nim) */
+.karta-kalendare {
+    position: relative;
+    background: var(--papir);
+    border: 1px solid var(--okraj);
+    border-radius: 18px;
+    box-shadow:
+        0 1px 1px rgba(43, 33, 24, 0.05),
+        /* druhy list */
+        0 6px 0 -3px #fbf1df,
+        0 6px 1px -2px rgba(43, 33, 24, 0.1),
+        /* treti list */
+        0 12px 0 -6px #f7ead3,
+        0 12px 1px -5px rgba(43, 33, 24, 0.09),
+        /* mekky stin pod celym blokem */
+        0 30px 50px -20px rgba(43, 33, 24, 0.28);
+    /* Obsah nepreteka pres zaoblene rohy */
+    overflow: hidden;
+    /* Plynule zesednuti behem nacitani */
+    transition: opacity 0.2s ease;
+}
+
+/* Behem nacitani mesice kalendar jemne zesedne */
+.karta-kalendare[aria-busy="true"] {
+    opacity: 0.7;
+}
+
+/* Radek s nazvy dnu (Po, Ut, ...) */
+.hlavicka-dnu {
+    /* Hlavni gradient aplikace s odleskem shora */
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 60%),
+        var(--gradient-hlavni);
+    color: #ffffff;
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 1.5rem;
+    font-weight: 700;
+    /* Stin textu - zlepsi citelnost bileho pisma na svetle oranzove */
+    text-shadow: 0 1px 1px rgba(150, 60, 20, 0.45);
+    /* Spodni okraj hlavicky jako ohyb papiru */
+    box-shadow: inset 0 -1px 0 rgba(150, 60, 20, 0.18), 0 2px 4px rgba(43, 33, 24, 0.06);
+    position: relative;
+    z-index: 1;
+}
+
+/* Animace prepnuti mesice: mrizka vyjede ze strany */
+.mrizka-dni.prechod-vpred {
+    animation: mrizka-zprava 0.32s var(--pruzina);
+}
+.mrizka-dni.prechod-vzad {
+    animation: mrizka-zleva 0.32s var(--pruzina);
+}
+
+/* Vyjeti zprava (dalsi mesic) */
+@keyframes mrizka-zprava {
+    from { opacity: 0; transform: translateX(24px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* Vyjeti zleva (predchozi mesic) */
+@keyframes mrizka-zleva {
+    from { opacity: 0; transform: translateX(-24px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* Jedna bunka (den) v mrizce kalendare */
+.bunka-dne {
+    position: relative;
+    /* Minimalni vyska, aby se do bunky vesly udalosti */
+    min-height: 7.5rem;
+    padding: 0.4rem;
+    /* Tenke jemne cary mezi dny */
+    border-right: 1px solid rgba(43, 33, 24, 0.07);
+    border-bottom: 1px solid rgba(43, 33, 24, 0.07);
+    /* Obsah pod sebou */
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    /* Kurzor ruky naznacuje, ze na bunku lze kliknout */
+    cursor: pointer;
+    /* Dovoli obsahu zmensit se pod svou prirozenou sirku (kvuli zkracovani textu) */
+    min-width: 0;
+    transition: background-color 0.15s ease;
+}
+
+/* Kazda sedma bunka (nedele) nema pravou caru */
+.bunka-dne:nth-child(7n) {
+    border-right: none;
+}
+
+/* Vikendove dny maji jemne teplejsi pozadi */
+.bunka-vikend {
+    background-color: rgba(255, 179, 92, 0.08);
+}
+
+/* Najeti mysi nebo vyber klavesnici (prazdne bunky mimo mesic ne) */
+@media (hover: hover) {
+    .bunka-dne:not(.bunka-prazdna):hover {
+        background-color: rgba(255, 214, 102, 0.2);
+    }
+    /* Cislo dne se pri najeti lehce zvetsi */
+    .bunka-dne:not(.bunka-prazdna):hover .cislo-dne {
+        transform: scale(1.12);
+    }
+    /* U dnesniho dne zustane natoceni kolecka */
+    .bunka-dnes:hover .cislo-dne {
+        transform: rotate(-6deg) scale(1.12);
+    }
+}
+
+/* Ovladani klavesnici - barevny obrys uvnitr bunky */
+.bunka-dne:focus-visible {
+    outline: none;
+    background-color: rgba(255, 214, 102, 0.2);
+    box-shadow: inset 0 0 0 2px rgba(255, 95, 109, 0.5);
+}
+
+/* Prazdna bunka mimo aktualni mesic - sikme srafovani */
+.bunka-prazdna {
+    background-image: repeating-linear-gradient(
+        -45deg,
+        transparent 0 8px,
+        rgba(43, 33, 24, 0.045) 8px 10px
+    );
+    cursor: default;
+}
+
+/* Cislo dne v bunce */
+.cislo-dne {
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1;
+    /* Pevna velikost oblasti (pouzije se pro kolecko u dnesniho dne) */
+    width: 2.1rem;
+    height: 2.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #5c4a3b;
+    flex-shrink: 0;
+    transition: transform 0.2s var(--pruzina-skok);
+}
+
+/* Dnesni den: cislo "zakrouzkovane fixou" */
+.bunka-dnes .cislo-dne {
+    color: var(--zvyrazneni);
+    border: 2px solid var(--zvyrazneni);
+    /* Nepravidelne zaobleni = kolecko vypada jako nakreslene rukou */
+    border-radius: 55% 45% 60% 40% / 45% 60% 40% 55%;
+    transform: rotate(-6deg);
+}
+
+/* Bunka dnesniho dne ma navic jemne zlute podbarveni */
+.bunka-dnes {
+    background-color: rgba(255, 214, 102, 0.16);
+}
+
+/* Bunka, nad kterou se prave drzi pretahovany listek */
+.bunka-dne.cil-pusteni {
+    background-color: rgba(255, 214, 102, 0.35);
+    box-shadow: inset 0 0 0 2px rgba(255, 95, 109, 0.55);
+}
+
+/* Behem pretahovani listku: prazdne bunky naznaci, ze sem nejde pustit */
+body.tahani .bunka-prazdna {
+    opacity: 0.6;
+}
+
+/* ---------------------------------------------------------------------
+   Listky udalosti (post-it)
+   --------------------------------------------------------------------- */
+
+/* Spolecny vzhled vsech listku */
+button.stitek-udalosti {
+    position: relative;
+    text-align: left;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--inkoust);
+    padding: 0.25rem 0.45rem;
+    /* Mirne zaobleni - listek papiru; pravy dolni roh vic (lehce zvednuty) */
+    border-radius: 3px 3px 7px 3px;
+    /* Hloubka: kontaktni stin + mekky stin + odlesk lepeneho pruhu nahore */
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        0 1px 1px rgba(43, 33, 24, 0.1),
+        0 3px 6px -2px rgba(43, 33, 24, 0.18);
+    /* Text a pocitadlo podukolu vedle sebe */
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    width: 100%;
+    /* Plynula animace pri najeti mysi */
+    transition: transform 0.18s var(--pruzina), box-shadow 0.18s var(--pruzina), opacity 0.15s ease;
+}
+
+/* Listek, ktery jde pretahnout, ma kurzor "chytit" */
+button.stitek-udalosti[draggable="true"] {
+    cursor: grab;
+}
+
+/* Listek, ktery se prave pretahuje - zprusvitni (pretahuje se jeho kopie) */
+button.stitek-udalosti.taha-se {
+    opacity: 0.4;
+}
+
+/* Text listku na jeden radek - co se nevejde, nahradi trojtecka */
+.stitek-text {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Cas na listku - tlumeny */
+.stitek-cas {
+    font-weight: 700;
+    opacity: 0.6;
+}
+
+/* Pocitadlo podukolu na listku, napr. "2/5" */
+.stitek-pocet {
+    flex-shrink: 0;
+    font-size: 0.68rem;
+    font-weight: 700;
+    /* Polopruhledne bile "pouzdro" */
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 999px;
+    padding: 0 0.35rem;
+    color: #6b5a4b;
+}
+
+/* Vse hotovo - zelena fajfka */
+.stitek-pocet.je-hotovo {
+    color: var(--hotovo);
+}
+
+/* Liche listky jsou nepatrne natocene doleva... */
+button.stitek-udalosti:nth-of-type(odd) {
+    transform: rotate(-0.6deg);
+}
+
+/* ...a sude doprava - pusobi to "nalepene rukou" */
+button.stitek-udalosti:nth-of-type(even) {
+    transform: rotate(0.5deg);
+}
+
+/* Pri najeti mysi se listek narovna, zvedne a stin se prodlouzi (odlepuje se od papiru) */
+@media (hover: hover) {
+    button.stitek-udalosti:hover {
+        transform: translateY(-2px) rotate(0deg) scale(1.03);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.6),
+            0 2px 3px rgba(43, 33, 24, 0.1),
+            0 10px 16px -6px rgba(43, 33, 24, 0.28);
+    }
+}
+
+/* Ovladani klavesnici - barevna aura */
+button.stitek-udalosti:focus-visible {
+    outline: none;
+    transform: rotate(0deg) scale(1.03);
+    box-shadow: 0 2px 4px rgba(43, 33, 24, 0.1), var(--ring);
+}
+
+/* Ctyri barvy listku - kazda je gradient s jemnym odleskem lepeneho pruhu nahore.
+   Barvu vybira script.js podle id udalosti (id % 4). Stejne barvy maji i polozky agendy. */
+
+/* Zluty listek */
+button.barva-0,
+li.barva-0 {
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 30%), linear-gradient(135deg, #fff1a6, #ffe486);
+}
+
+/* Ruzovy listek */
+button.barva-1,
+li.barva-1 {
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 30%), linear-gradient(135deg, #ffd3de, #ffc0cf);
+}
+
+/* Matovy listek */
+button.barva-2,
+li.barva-2 {
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 30%), linear-gradient(135deg, #cff3e3, #b8ebd6);
+}
+
+/* Modry listek */
+button.barva-3,
+li.barva-3 {
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 30%), linear-gradient(135deg, #d6eaff, #c2defb);
+}
+
+/* Vysledky hledani maji jen barevny prouzek, ne cele pozadi */
+li.vysledek {
+    background-image: none;
+}
+
+/* Tlacitko "+N dalsi" - rozbali schovane listky v plne bunce */
+button.btn-dalsi-listky {
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--zvyrazneni);
+    padding: 0 0.4rem;
+    background: transparent;
+}
+
+/* Pri najeti mysi se text podtrhne jako odkaz */
+button.btn-dalsi-listky:hover {
+    text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------------
+   Agenda vybraneho dne (jen mobil - na pocitaci je skryta)
+   --------------------------------------------------------------------- */
+.agenda {
+    display: none;
+}
+
+/* Nadpis agendy (datum) */
+.agenda-nadpis {
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 1.7rem;
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: 0.75rem;
+}
+
+/* Seznam udalosti dne */
+.agenda-seznam {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+/* Jedna udalost v agende - velky lepici listek pres celou sirku */
+button.agenda-polozka {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 3.25rem;
+    padding: 0.6rem 0.9rem;
+    text-align: left;
+    color: var(--inkoust);
+    border-radius: 4px 4px 12px 4px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        0 1px 1px rgba(43, 33, 24, 0.1),
+        0 6px 12px -6px rgba(43, 33, 24, 0.25);
+    transition: transform 0.12s var(--pruzina), box-shadow 0.12s var(--pruzina);
+}
+
+/* Stisk polozky agendy */
+button.agenda-polozka:active {
+    transform: scale(0.98);
+}
+
+/* Lichy listek nepatrne natoceny */
+button.agenda-polozka:nth-child(odd) {
+    transform: rotate(-0.4deg);
+}
+
+/* Cas v agende */
+.agenda-cas {
+    font-weight: 800;
+    font-size: 0.9rem;
+    opacity: 0.65;
+    flex-shrink: 0;
+}
+
+/* Nazev v agende */
+.agenda-nazev {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+/* Prazdny den */
+.agenda-prazdno {
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 1.3rem;
+    color: var(--tuzka);
+}
+
+/* Tlacitko pridani v agende */
+button.agenda-pridat {
+    align-self: flex-start;
+    margin-top: 0.25rem;
+}
+
+/* ---------------------------------------------------------------------
+   Hlasky, poznamky a oznameni
+   --------------------------------------------------------------------- */
+
+/* Chybova hlaska - cerveny papirek */
+.hlaska-chyba {
+    padding: 0.6rem 0.9rem;
+    background: linear-gradient(135deg, #ffe3e3, #ffd6d6);
+    border: 1px solid rgba(179, 38, 30, 0.22);
+    border-left: 4px solid #d93a3a;
+    border-radius: 10px;
+    color: #8c1d18;
+    font-weight: 600;
+    box-shadow: var(--stin-1);
+    /* Hlaska se objevi s malym "zatresenim" pozornosti */
+    animation: vyjeti-dolu 0.2s var(--pruzina);
+}
+
+/* Zprava o uspechu - zeleny papirek (stejny tvar jako chybova hlaska) */
+.hlaska-ok {
+    padding: 0.6rem 0.9rem;
+    background: linear-gradient(135deg, #e3f7ea, #d3f1de);
+    border: 1px solid rgba(46, 125, 79, 0.22);
+    border-left: 4px solid #3a9a62;
+    border-radius: 10px;
+    color: #1f5c39;
+    font-weight: 600;
+    box-shadow: var(--stin-1);
+    animation: vyjeti-dolu 0.2s var(--pruzina);
+}
+
+/* Potvrzeni smazani udalosti v okne detailu */
+.potvrzeni-smazani {
+    padding: 0.9rem 1rem;
+    background: #fff1f1;
+    border: 1px solid rgba(217, 58, 58, 0.28);
+    border-left: 4px solid #d93a3a;
+    border-radius: 12px;
+    font-weight: 600;
+    animation: vyjeti-dolu 0.18s var(--pruzina);
+}
+
+/* Odkaz v textu (a tlacitko, ktere vypada jako odkaz, napr. "odhlasit") */
+.odkaz {
+    color: var(--zvyrazneni);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+}
+
+/* Pri najeti mysi se podtrzeni zvlni - jako by ho nekdo podtrhl rukou */
+.odkaz:hover {
+    text-decoration-style: wavy;
+}
+
+/* Tlacitko-odkaz: bez pozadi a okraju (prepise reset Tailwindu) */
+button.odkaz {
+    background: transparent;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
+/* Zablokovany odkaz (napr. "vygenerovat znovu" bez API klice) */
+button.odkaz:disabled {
+    color: #b5a99c;
+    text-decoration: none;
+    cursor: not-allowed;
+}
+
+/* Viditelny fokus odkazu pri ovladani klavesnici */
+.odkaz:focus-visible {
+    outline: 2px solid rgba(255, 95, 109, 0.5);
+    outline-offset: 2px;
+    border-radius: 3px;
+}
+
+/* Zaskrtavaci policko s textem (napr. "Zustat prihlasen") */
+.zaskrtavatko {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    cursor: pointer;
+}
+
+/* Samotne policko */
+.zaskrtavatko input {
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: 0.2rem;
+    accent-color: var(--zvyrazneni);
+    flex-shrink: 0;
+}
+
+/* Mala napoveda pod polem formulare */
+.napoveda {
+    font-size: 0.85rem;
+    color: var(--tuzka);
+}
+
+/* Prehled udaju na strance uctu (seznam "pojem - hodnota") */
+.prehled-uctu {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 1rem;
+    align-items: baseline;
+}
+
+/* Pojem (napr. "E-mail") */
+.prehled-uctu dt {
+    color: var(--tuzka);
+}
+
+/* Hodnota */
+.prehled-uctu dd {
+    font-weight: 600;
+    min-width: 0;
+}
+
+/* Rucne psana poznamka pod kalendarem */
+.poznamka {
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 1.35rem;
+    color: var(--tuzka);
+    transform: rotate(-0.6deg);
+}
+
+/* Klavesy v rucne psane poznamce - normalni pismo */
+.poznamka kbd.klavesa {
+    font-size: 0.7em;
+    vertical-align: 0.15em;
+}
+
+/* Kratsi verze napovedy jen pro mobil (na pocitaci skryta) */
+.napoveda-mobil {
+    display: none;
+}
+
+/* Kratke oznameni dole na obrazovce - tmavy papirek */
+.oznameni {
+    position: fixed;
+    z-index: 60;
+    left: 50%;
+    bottom: calc(1.25rem + env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    max-width: min(32rem, calc(100vw - 2rem));
+    padding: 0.7rem 0.8rem 0.7rem 1.1rem;
+    background: linear-gradient(180deg, #3a2e24, #2b2118);
+    color: #fff7ea;
+    border-radius: 14px;
+    box-shadow: 0 2px 4px rgba(43, 33, 24, 0.2), 0 16px 32px -8px rgba(43, 33, 24, 0.45);
+    font-weight: 600;
+    transform: translateX(-50%);
+}
+
+/* Animace vyjeti oznameni zdola */
+.oznameni.je-videt {
+    animation: oznameni-vyjeti 0.3s var(--pruzina-skok);
+}
+
+/* Tlacitko v oznameni (napr. "Zpět") */
+button.oznameni-akce {
+    flex-shrink: 0;
+    min-height: 2.25rem;
+    padding: 0 0.85rem;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffd27a;
+    font-weight: 800;
+    transition: background-color 0.12s ease;
+}
+
+/* Najeti na tlacitko v oznameni */
+button.oznameni-akce:hover,
+button.oznameni-akce:focus-visible {
+    background: rgba(255, 255, 255, 0.22);
+    outline: none;
+}
+
+/* Vyjeti oznameni */
+@keyframes oznameni-vyjeti {
+    from { opacity: 0; transform: translate(-50%, 16px) scale(0.96); }
+    to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+/* Spolecna animace "vyjeti shora" (hlasky, seznam vysledku) */
+@keyframes vyjeti-dolu {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Tri lepici listky "co aplikace umi" na prihlasovaci strance */
+.vyhody {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 2rem;
+}
+
+/* Jeden listek */
+.vyhoda {
+    padding: 0.55rem 0.8rem;
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1.1;
+    border-radius: 3px 3px 9px 3px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.6),
+        0 1px 1px rgba(43, 33, 24, 0.1),
+        0 6px 12px -6px rgba(43, 33, 24, 0.28);
+}
+
+/* Kazdy listek natoceny jinak */
+.vyhoda:nth-child(1) { transform: rotate(-2deg); }
+.vyhoda:nth-child(2) { transform: rotate(1.5deg); }
+.vyhoda:nth-child(3) { transform: rotate(-1deg); }
+
+/* ---------------------------------------------------------------------
+   Karty (prihlaseni, registrace, ucet) a modalni okna
+   --------------------------------------------------------------------- */
+
+/* Pozadi za oknem - jemne ztmaveni do teple barvy a rozmazani stranky pod nim */
+.modal-pozadi {
+    background: rgba(43, 33, 24, 0.38);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    /* Kdyz je okno vyssi nez obrazovka, roluje se cele pozadi */
+    overflow-y: auto;
+    /* Rolovani okna "nepreteka" na stranku pod nim */
+    overscroll-behavior: contain;
+    animation: zatmaveni 0.2s ease;
+}
+
+/* Animace pozadi */
+@keyframes zatmaveni {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Samotne okno a karty - list papiru s linkami jako v sesite */
+.modal-okno,
+.list-papiru {
+    position: relative;
+    padding: 2rem 1.75rem 1.5rem;
+    background-color: var(--papir);
+    background-image: repeating-linear-gradient(
+        transparent 0 31px,
+        rgba(96, 140, 190, 0.12) 31px 32px
+    );
+    border: 1px solid var(--okraj);
+    border-radius: 18px;
+    box-shadow: var(--stin-okno);
+    /* Okno dostava fokus ze script.js (tabindex="-1") - obrys prohlizece by tu rusil */
+    outline: none;
+    /* margin auto okno vycentruje; na rozdil od align-items: center se pri malem
+       displeji neodrizne horni cast okna */
+    margin: auto;
+}
+
+/* Okno se pri otevreni "polozi" na stul: z mirneho natoceni a vyse */
+.modal-okno {
+    animation: polozeni 0.32s var(--pruzina);
+}
+
+/* Animace polozeni okna */
+@keyframes polozeni {
+    from { opacity: 0; transform: translateY(18px) rotate(-1.5deg) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
+}
+
+/* "Washi paska" - kousek lepici pasky nahore uprostred okna a karet */
+.modal-okno::before,
+.list-papiru::before {
+    content: '';
+    position: absolute;
+    top: -11px;
+    left: 50%;
+    width: 96px;
+    height: 22px;
+    transform: translateX(-50%) rotate(-2deg);
+    /* Poloprusvitny prouzkovany gradient = vzor pasky */
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(255, 179, 92, 0.55) 0 10px,
+        rgba(255, 140, 110, 0.45) 10px 20px
+    );
+    /* Paska ma jemny stin - lezi NA papiru */
+    box-shadow: 0 1px 2px rgba(43, 33, 24, 0.12);
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+/* Karta na strance lezi na papiru, proto ma mensi stin nez vznasejici se okno;
+   pri najeti se jemne zvedne */
+.list-papiru {
+    margin: 0;
+    box-shadow: var(--stin-3);
+    transition: box-shadow 0.25s var(--pruzina), transform 0.25s var(--pruzina);
+    animation: polozeni 0.4s var(--pruzina) backwards;
+}
+
+/* Karty na strance uctu prichazi postupne (kazda o kousek pozdeji) */
+.list-papiru:nth-child(2) { animation-delay: 0.04s; }
+.list-papiru:nth-child(3) { animation-delay: 0.08s; }
+.list-papiru:nth-child(4) { animation-delay: 0.12s; }
+.list-papiru:nth-child(5) { animation-delay: 0.16s; }
+.list-papiru:nth-child(6) { animation-delay: 0.2s; }
+
+/* Karta s nebezpecnou akci (smazani uctu) ma cervenou pasku */
+.list-nebezpeci::before {
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(217, 58, 58, 0.45) 0 10px,
+        rgba(255, 140, 140, 0.4) 10px 20px
+    );
+}
+
+/* Krizek pro zavreni okna (vpravo nahore) */
+button.zavrit-x {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: transparent;
+    color: #a3968a;
+    font-size: 1.6rem;
+    line-height: 1;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.2s var(--pruzina);
+}
+
+/* Najeti na krizek */
+button.zavrit-x:hover,
+button.zavrit-x:focus-visible {
+    background: rgba(43, 33, 24, 0.06);
+    color: var(--inkoust);
+    transform: rotate(90deg);
+    outline: none;
+}
+
+/* Nadpis v okne */
+.titulek-okna {
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 2.4rem;
+    font-weight: 700;
+    line-height: 1.05;
+    margin-bottom: 1rem;
+    /* Misto pro krizek vpravo nahore */
+    padding-right: 1.5rem;
+}
+
+/* Popisek formularoveho pole */
+.popisek {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+}
+
+/* Text "(nepovinna)" u popisku */
+.nepovinne {
+    font-weight: 400;
+    color: var(--tuzka);
+}
+
+/* Vstupni pole formulare - lehce "vtlacene" do papiru (vnitrni stin) */
+.pole {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    background: #ffffff;
+    border: 1px solid var(--okraj-pole);
+    border-radius: 11px;
+    box-shadow: inset 0 1px 2px rgba(43, 33, 24, 0.07);
+    /* 16 px = mobilni Safari pri kliknuti stranku nezvetsuje */
+    font-size: 1rem;
+    color: var(--inkoust);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Viceradkove pole jde roztahovat jen do vysky (do sirky by rozbilo okno) */
+textarea.pole {
+    resize: vertical;
+}
+
+/* Aktivni pole - koralovy obrys a jemna aura misto modreho obrysu */
+.pole:focus {
+    outline: none;
+    border-color: var(--zvyrazneni);
+    box-shadow: inset 0 1px 2px rgba(43, 33, 24, 0.05), var(--ring);
+}
+
+/* Pole s heslem a tlacitkem "ukázat" (vytvari formulare.js) */
+.pole-heslo {
+    position: relative;
+}
+
+/* Misto pro tlacitko vpravo v poli */
+.pole-heslo .pole {
+    padding-right: 4.75rem;
+}
+
+/* Tlacitko "ukázat / skrýt" uvnitr pole */
+button.ukazat-heslo {
+    position: absolute;
+    right: 0.35rem;
+    top: 50%;
+    transform: translateY(-50%);
+    min-height: 2.1rem;
+    padding: 0 0.6rem;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--tuzka);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+/* Najeti na tlacitko */
+button.ukazat-heslo:hover,
+button.ukazat-heslo:focus-visible {
+    background: rgba(43, 33, 24, 0.06);
+    color: var(--inkoust);
+    outline: none;
+}
+
+/* Ukazatel sily hesla: prouzek a text */
+.sila-hesla {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.4rem;
+    min-height: 1.1rem;
+    font-size: 0.8rem;
+    color: var(--tuzka);
+}
+
+/* Prouzek sily (sirku a barvu urcuje uroven 0-4) */
+.sila-prouzek {
+    position: relative;
+    width: 6rem;
+    height: 6px;
+    border-radius: 99px;
+    background: rgba(43, 33, 24, 0.1);
+    overflow: hidden;
+}
+
+/* Vypln prouzku */
+.sila-prouzek::after {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    border-radius: inherit;
+    transition: width 0.25s var(--pruzina), background-color 0.25s ease;
+}
+
+/* Jednotlive urovne sily */
+.sila-hesla[data-uroven="1"] .sila-prouzek::after { width: 25%; background: #d93a3a; }
+.sila-hesla[data-uroven="2"] .sila-prouzek::after { width: 50%; background: #f0a030; }
+.sila-hesla[data-uroven="3"] .sila-prouzek::after { width: 75%; background: #8cbf3f; }
+.sila-hesla[data-uroven="4"] .sila-prouzek::after { width: 100%; background: var(--hotovo); }
+
+/* Datum a cas v detailu udalosti */
+.detail-kdy {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 800;
+    color: var(--zvyrazneni);
+    margin-bottom: 0.25rem;
+    /* Misto pro krizek vpravo nahore */
+    padding-right: 2rem;
+}
+
+/* Formular pro presun udalosti (datum, cas, tlacitka) */
+.form-presun {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.25rem 0 0.75rem;
+    padding: 0.6rem;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px dashed rgba(255, 95, 109, 0.45);
+    border-radius: 12px;
+    animation: vyjeti-dolu 0.18s var(--pruzina);
+}
+
+/* Pole data a casu se deli o misto */
+.form-presun .pole {
+    flex: 1 1 8rem;
+    width: auto;
+}
+
+/* Popis v detailu udalosti */
+.detail-popis {
+    /* Vyska radku odpovida linkam papiru (32 px) */
+    line-height: 32px;
+    color: #4a3b2e;
+    margin-bottom: 1.25rem;
+}
+
+/* Prazdny popis ("Bez popisu.") - tlumeny a kurzivou */
+.detail-popis.je-prazdny {
+    color: #a3968a;
+    font-style: italic;
+}
+
+/* Tuzka pro upravu - lezi v levem okraji okna, takze text vedle ni se neposune */
+button.btn-tuzka {
+    position: absolute;
+    left: -1.55rem;
+    top: 0.55rem;
+    width: 1.4rem;
+    height: 1.4rem;
+    font-size: 1rem;
+    line-height: 1.4rem;
+    color: #a3968a;
+    background: transparent;
+    border-radius: 6px;
+    transition: color 0.12s, transform 0.2s var(--pruzina-skok);
+}
+
+/* Tuzka u popisu - zarovnani s prvnim radkem popisu (vyska radku 32 px) */
+button.btn-tuzka-popis {
+    top: 0.35rem;
+}
+
+/* Tuzka u data - zarovnani s malym textem data */
+button.btn-tuzka-kdy {
+    top: -0.2rem;
+}
+
+/* Pri najeti mysi tuzka zcervena a "nakloni se" jako pri psani */
+button.btn-tuzka:hover,
+button.btn-tuzka:focus-visible {
+    color: var(--zvyrazneni);
+    transform: rotate(-15deg) scale(1.1);
+    outline: none;
+}
+
+/* Text, ktery se prave upravuje - zvyrazneny podbarvenim a carou pod textem */
+.upravuje-se {
+    outline: none;
+    background-color: rgba(255, 214, 102, 0.3);
+    box-shadow: 0 2px 0 0 var(--zvyrazneni);
+    border-radius: 4px;
+    cursor: text;
+}
+
+/* ---------------------------------------------------------------------
+   Pripravne podukoly
+   --------------------------------------------------------------------- */
+
+/* Sekce oddelena tenkou carou */
+.sekce-ai {
+    border-top: 1px solid var(--okraj);
+    padding-top: 1rem;
+}
+
+/* Nadpis sekce "Priprava" */
+.nadpis-sekce {
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+/* Ukazatel prubehu - "vtlaceny" zlabek, do ktereho se naleva barva */
+.ukazatel {
+    position: relative;
+    display: block;
+    height: 9px;
+    margin: 0.35rem 0 0.75rem;
+    border-radius: 99px;
+    background: rgba(43, 33, 24, 0.08);
+    box-shadow: inset 0 1px 2px rgba(43, 33, 24, 0.15);
+    overflow: hidden;
+}
+
+/* Vypln ukazatele - oranzovy gradient s jemnymi pruhy (jako fix) */
+.ukazatel-vypln {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background:
+        repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.18) 0 6px, rgba(255, 255, 255, 0) 6px 12px),
+        var(--gradient-hlavni);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    /* Plynule doplneni pri odskrtnuti */
+    transition: width 0.45s var(--pruzina), background-color 0.3s ease;
+}
+
+/* Vse hotovo - ukazatel zezelena */
+.ukazatel.je-hotovo .ukazatel-vypln {
+    background:
+        repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.18) 0 6px, rgba(255, 255, 255, 0) 6px 12px),
+        linear-gradient(100deg, #3fb27f, #2e9b6a);
+}
+
+/* Ukazatel na strance uctu - pod textem */
+.ukazatel-ucet {
+    margin: 0.4rem 0 0;
+    max-width: 14rem;
+}
+
+/* "Oslava" - po odskrtnuti posledniho podukolu ukazatel jednou zablikne */
+.ukazatel.oslava {
+    animation: oslava 0.7s var(--pruzina-skok);
+}
+
+/* Animace oslavy */
+@keyframes oslava {
+    0% { transform: scaleY(1); box-shadow: inset 0 1px 2px rgba(43, 33, 24, 0.15); }
+    40% { transform: scaleY(1.6); box-shadow: inset 0 1px 2px rgba(43, 33, 24, 0.15), 0 0 0 4px rgba(63, 178, 127, 0.25); }
+    100% { transform: scaleY(1); box-shadow: inset 0 1px 2px rgba(43, 33, 24, 0.15); }
+}
+
+/* AI tlacitko - jemne merunkove s koralovym textem a vlastni hranou (3D) */
+button.btn-ai {
+    --hrana: rgba(217, 72, 90, 0.28);
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 3rem;
+    padding: 0.65rem 1rem;
+    margin-top: 0.75rem;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 60%),
+        linear-gradient(100deg, #fff1e6 0%, #ffe6d8 100%);
+    color: #d9485a;
+    border: 1px solid rgba(255, 95, 109, 0.32);
+    border-radius: 14px;
+    font-weight: 700;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.8),
+        0 3px 0 var(--hrana),
+        0 6px 14px -4px rgba(217, 72, 90, 0.25);
+    transition: transform 0.14s var(--pruzina), box-shadow 0.14s var(--pruzina);
+}
+
+/* Jiskra v AI tlacitku */
+.btn-ai-ikona {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+}
+
+/* Najeti mysi - lehke zvednuti a jiskra se pootoci */
+@media (hover: hover) {
+    button.btn-ai:not(:disabled):hover {
+        transform: translateY(-1px);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.8),
+            0 4px 0 var(--hrana),
+            0 10px 20px -6px rgba(217, 72, 90, 0.32);
+    }
+    button.btn-ai:not(:disabled):hover .btn-ai-ikona {
+        transform: rotate(20deg) scale(1.1);
+    }
+}
+
+/* Plynule pootoceni jiskry */
+.btn-ai-ikona {
+    transition: transform 0.25s var(--pruzina-skok);
+}
+
+/* Stisk AI tlacitka */
+button.btn-ai:not(:disabled):active {
+    transform: translateY(2px);
+    box-shadow:
+        inset 0 1px 2px rgba(217, 72, 90, 0.15),
+        0 1px 0 var(--hrana),
+        0 2px 4px -1px rgba(217, 72, 90, 0.2);
+}
+
+/* Ovladani klavesnici - jemna aura */
+button.btn-ai:focus-visible {
+    outline: none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 3px 0 var(--hrana), var(--ring);
+}
+
+/* Zablokovane AI tlacitko (chybi klic) - tlumene a prouzkovane */
+button.btn-ai:disabled {
+    background: repeating-linear-gradient(-45deg, #f3eee6 0 12px, #ede6db 12px 24px);
+    color: #9a8f82;
+    border-color: #d8cfc3;
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+/* Behem generovani: kurzor "cekej" a preblesk svetla pres tlacitko */
+button.btn-ai[aria-busy="true"] {
+    cursor: progress;
+    color: #d9485a;
+    border-color: rgba(255, 95, 109, 0.32);
+    background:
+        linear-gradient(100deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, 0.75) 50%, rgba(255, 255, 255, 0) 70%) 0 0 / 250% 100%,
+        linear-gradient(100deg, #fff1e6 0%, #ffe6d8 100%);
+    animation: preblesk 1.4s linear infinite;
+}
+
+/* Animace prebleskuu: svetly pruh projede zleva doprava */
+@keyframes preblesk {
+    from { background-position: 150% 0, 0 0; }
+    to { background-position: -100% 0, 0 0; }
+}
+
+/* Tocici se kolecko (nacitani) */
+.nacitani {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid rgba(217, 72, 90, 0.25);
+    border-top-color: #d9485a;
+    border-radius: 50%;
+    animation: toceni 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+/* Animace toceni */
+@keyframes toceni {
+    to { transform: rotate(360deg); }
+}
+
+/* Poznamka pod AI tlacitkem */
+.poznamka-ai {
+    font-family: 'Caveat', 'Segoe Print', cursive;
+    font-size: 1.15rem;
+    color: #9a8f82;
+    text-align: center;
+    margin-top: 0.4rem;
+}
+
+/* Text "Načítám přípravu…" jemne pulzuje */
+.nacitani-text {
+    animation: pulz 1.2s ease-in-out infinite;
+}
+
+/* Animace pulzovani */
+@keyframes pulz {
+    50% { opacity: 0.45; }
+}
+
+/* Seznam podukolu */
+.seznam-podukolu {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+/* Jeden podukol: policko, text, akce */
+.podukol {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    padding: 0.45rem 0.4rem 0.45rem 0.5rem;
+    border-radius: 10px;
+    transition: background-color 0.15s ease, opacity 0.2s ease, transform 0.2s var(--pruzina);
+}
+
+/* Najeti mysi na podukol - jemne podbarveni */
+@media (hover: hover) {
+    .podukol:hover {
+        background-color: rgba(255, 214, 102, 0.16);
+    }
+}
+
+/* Nove vygenerovane podukoly postupne "pritancuji" (kazdy o kousek pozdeji) */
+.seznam-podukolu.je-novy .podukol {
+    animation: pritanceni 0.4s var(--pruzina) backwards;
+    animation-delay: calc(var(--poradi, 0) * 60ms);
+}
+
+/* Animace prichodu polozky */
+@keyframes pritanceni {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* Mazany podukol odjede doprava */
+.podukol.odchazi {
+    opacity: 0;
+    transform: translateX(16px);
+}
+
+/* Dulezity podukol - jemne zlute podbarveni */
+.podukol.je-dulezity {
+    background-color: rgba(255, 214, 102, 0.14);
+}
+
+/* Zaskrtavaci policko s vlastnim vzhledem: "vtlaceny" ctverecek, po zaskrtnuti
+   zelena "kapka" s fajfkou, ktera vyskoci */
+input.podukol-zaskrt {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1.35rem;
+    height: 1.35rem;
+    margin-top: 0.05rem;
+    display: grid;
+    place-content: center;
+    border: 2px solid #cbb9a6;
+    border-radius: 7px;
+    background: #ffffff;
+    box-shadow: inset 0 1px 2px rgba(43, 33, 24, 0.12);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s var(--pruzina-skok);
+}
+
+/* Fajfka (dva okraje natoceneho obdelniku); schovana zmensenim na 0 */
+input.podukol-zaskrt::before {
+    content: '';
+    width: 0.62rem;
+    height: 0.34rem;
+    margin-top: -0.15rem;
+    border-left: 2.5px solid #ffffff;
+    border-bottom: 2.5px solid #ffffff;
+    transform: rotate(-45deg) scale(0);
+    transition: transform 0.22s var(--pruzina-skok);
+}
+
+/* Zaskrtnuto: zeleny gradient a fajfka vyskoci */
+input.podukol-zaskrt:checked {
+    border-color: #2e8b5f;
+    background: linear-gradient(135deg, #47be88, #2e9b6a);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 4px -1px rgba(46, 155, 106, 0.45);
+}
+input.podukol-zaskrt:checked::before {
+    transform: rotate(-45deg) scale(1);
+}
+
+/* Stisk policka - male zmacknuti */
+input.podukol-zaskrt:active {
+    transform: scale(0.88);
+}
+
+/* Fokus z klavesnice */
+input.podukol-zaskrt:focus-visible {
+    outline: none;
+    box-shadow: inset 0 1px 2px rgba(43, 33, 24, 0.12), var(--ring);
+}
+
+/* Nazev a termin pod sebou; zabere zbytek radku */
+.podukol-obal {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+}
+
+/* Nazev podukolu */
+.podukol-nazev {
+    cursor: pointer;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+    transition: color 0.2s ease;
+}
+
+/* Text nazvu nese "preskrtnuti" - cara se pri splneni plynule natahne zleva doprava
+   (background-size 0 -> 100 %; box-decoration-break = cara i na dalsich radcich) */
+.podukol-text {
+    background-image: linear-gradient(rgba(43, 33, 24, 0.45), rgba(43, 33, 24, 0.45));
+    background-repeat: no-repeat;
+    background-position: 0 58%;
+    background-size: 0 1.5px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    transition: background-size 0.35s var(--pruzina);
+}
+
+/* Splneny podukol - preskrtnuty a tlumeny */
+.podukol.je-splneny .podukol-nazev {
+    color: #a3968a;
+}
+.podukol.je-splneny .podukol-text {
+    background-size: 100% 1.5px;
+}
+
+/* Termin a odhad pod nazvem, napr. "den předem · 8. 10. · ~20 min" */
+.podukol-termin {
+    font-size: 0.78rem;
+    color: #8a7b6d;
+}
+
+/* Nesplneny podukol po terminu - cervene */
+.podukol-termin.je-po-terminu {
+    color: #c0392b;
+}
+
+/* Male akce u podukolu (hvezda, tuzka, krizek) */
+button.podukol-akce {
+    width: 2rem;
+    height: 2rem;
+    margin-top: -0.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border-radius: 8px;
+    color: #c4b8ab;
+    font-size: 1rem;
+    flex-shrink: 0;
+    transition: color 0.15s ease, background-color 0.15s ease, transform 0.2s var(--pruzina-skok);
+}
+
+/* Najeti mysi / klavesnice */
+button.podukol-akce:hover,
+button.podukol-akce:focus-visible {
+    color: var(--inkoust);
+    background-color: rgba(43, 33, 24, 0.06);
+    outline: none;
+}
+
+/* Krizek pri najeti zcervena */
+button.podukol-smazat:hover,
+button.podukol-smazat:focus-visible {
+    color: #c0392b;
+}
+
+/* Hvezda: zapnuta = zlata a "vyskoci" */
+button.podukol-hvezda[aria-pressed="true"] {
+    color: #f0a020;
+    text-shadow: 0 1px 2px rgba(200, 120, 0, 0.35);
+    transform: scale(1.12);
+}
+
+/* Najeti na vypnutou hvezdu naznaci zlatou barvu */
+button.podukol-hvezda:hover {
+    color: #f0b040;
+}
+
+/* Textove pole pri uprave nazvu podukolu - mensi nez bezne pole */
+.pole.pole-podukol {
+    min-height: 2.25rem;
+    padding: 0.2rem 0.5rem;
+}
+
+/* Formular pro vlastni podukol (pole + tlacitko) */
+.novy-podukol {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+}
+
+/* Pole noveho podukolu - vypada jako prazdny radek v sesite */
+.novy-podukol .pole {
+    min-height: 2.5rem;
+    background: rgba(255, 255, 255, 0.6);
+    border-style: dashed;
+}
+.novy-podukol .pole:focus {
+    background: #ffffff;
+    border-style: solid;
+}
+
+/* Radek akci pod seznamem: "vygenerovat znovu · smazat vsechny" */
+.akce-podukolu {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+    font-size: 0.85rem;
+    color: #a3968a;
+}
+
+/* ---------------------------------------------------------------------
+   Uzke obrazovky (mobil, sirka do 640 px)
+   --------------------------------------------------------------------- */
+@media (max-width: 640px) {
+    /* Hlavni obal: okraje i pro vyrez displeje (iPhone na sirku) */
+    .obal-aplikace {
+        padding-left: max(0.75rem, env(safe-area-inset-left));
+        padding-right: max(0.75rem, env(safe-area-inset-right));
+    }
+
+    /* Horni lista: ucet nahore vpravo, vyhledavani pod nim pres celou sirku */
+    .horni-lista {
+        flex-direction: column-reverse;
+        align-items: stretch;
+        gap: 0.6rem;
+        margin-bottom: 0.75rem;
+    }
+    .hledani {
+        max-width: none;
+        flex-basis: auto;
+    }
+    .uzivatel-panel {
+        font-size: 1.2rem;
+    }
+    /* Pozdrav se na mobil nevejde - zustanou odkazy */
+    .uzivatel-panel .pozdrav {
+        display: none;
+    }
+    /* Napoveda klavesy "/" nema na mobilu smysl (kbd. = silnejsi nez pravidlo kbd.klavesa) */
+    kbd.hledani-klavesa {
+        display: none;
+    }
+
+    /* Hlavicka: nazev na stred, ovladani mesicu pres celou sirku */
+    .hlavicka-aplikace {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    .hlavicka-nazev {
+        text-align: center;
+    }
+    .nadpis-app {
+        font-size: 3rem;
+    }
+    .podtitulek {
+        margin-left: 0;
+        font-size: 1.2rem;
+    }
+    .ovladani-mesicu {
+        gap: 0.4rem;
+    }
+    /* Nazev mesice zabere misto mezi sipkami */
+    .nadpis-mesice {
+        flex: 1;
+        min-width: 0;
+        font-size: 1.8rem;
+        order: 1;
+    }
+    #btn-predchozi { order: 0; }
+    #btn-dalsi { order: 2; }
+    #btn-dnes { order: 3; }
+    /* Tlacitko "Nová událost" nahradi kulate tlacitko vpravo dole */
+    button.btn-nova {
+        display: none;
+    }
+    button.fab {
+        display: flex;
+    }
+
+    /* Kalendar: mensi zaobleni a stin */
+    .karta-kalendare {
+        border-radius: 14px;
+    }
+    .hlavicka-dnu {
+        font-size: 1.15rem;
+    }
+    /* Nizsi bunky; obsah na stred */
+    .bunka-dne {
+        min-height: 3.6rem;
+        padding: 0.2rem 0.15rem 0.3rem;
+        align-items: center;
+        gap: 0.15rem;
+    }
+    /* Mensi cislo dne */
+    .cislo-dne {
+        font-size: 1.15rem;
+        width: 1.75rem;
+        height: 1.75rem;
+    }
+    /* Vybrany den: cislo v oranzovem kolecku */
+    .bunka-vybrana .cislo-dne {
+        color: #ffffff;
+        background: var(--gradient-hlavni);
+        border-radius: 50%;
+        box-shadow: 0 2px 0 #e0763c, 0 4px 8px -2px rgba(214, 102, 48, 0.5);
+        text-shadow: 0 1px 1px rgba(150, 60, 20, 0.4);
+    }
+    /* Dnesni a zaroven vybrany den - kolecko fixou zustane videt */
+    .bunka-vybrana.bunka-dnes .cislo-dne {
+        border-color: #ffffff;
+    }
+    .bunka-vybrana {
+        background-color: rgba(255, 214, 102, 0.22);
+    }
+    /* Listky jsou na mobilu jen barevne "prouzky" (text by byl necitelny);
+       tuknuti projde na bunku - vybere den a ukaze agendu */
+    button.stitek-udalosti {
+        height: 5px;
+        padding: 0;
+        border-radius: 99px;
+        font-size: 0;
+        pointer-events: none;
+        box-shadow: 0 1px 1px rgba(43, 33, 24, 0.15);
+    }
+    button.stitek-udalosti > * {
+        display: none;
+    }
+    /* Prouzky nenatacime */
+    button.stitek-udalosti:nth-of-type(odd),
+    button.stitek-udalosti:nth-of-type(even) {
+        transform: none;
+    }
+    /* "+N dalsi" jako maly text, take bez kliknuti */
+    button.btn-dalsi-listky {
+        font-size: 0.62rem;
+        padding: 0;
+        line-height: 1;
+        pointer-events: none;
+    }
+
+    /* Agenda vybraneho dne je videt jen na mobilu */
+    .agenda {
+        display: block;
+        margin-top: 1.5rem;
+        /* Pri posunu do zorneho pole nezajede pod okraj obrazovky */
+        scroll-margin-bottom: 6rem;
+    }
+    /* Kratsi napoveda */
+    .napoveda-pocitac {
+        display: none;
+    }
+    .napoveda-mobil {
+        display: block;
+    }
+
+    /* Modalni okna jako "spodni list" vyjizdejici zdola pres celou sirku */
+    div.modal-pozadi {
+        padding: 0;
+        align-items: flex-end;
+    }
+    .modal-okno {
+        width: 100%;
+        max-width: none;
+        max-height: 92vh;
+        max-height: 92dvh;
+        margin: auto 0 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        border-radius: 22px 22px 0 0;
+        border-bottom: none;
+        padding: 1.75rem 1.1rem calc(1.25rem + env(safe-area-inset-bottom)) 2rem;
+        animation: vyjeti-zdola 0.32s var(--pruzina);
+    }
+    /* Misto lepici pasky "uchyt" nahore uprostred (paska by se orizla) */
+    .modal-okno::before {
+        top: 0.55rem;
+        width: 2.75rem;
+        height: 5px;
+        border-radius: 99px;
+        background: rgba(43, 33, 24, 0.18);
+        box-shadow: none;
+        transform: translateX(-50%);
+    }
+    /* Mensi nadpis okna */
+    .titulek-okna {
+        font-size: 2rem;
+    }
+    /* Tlacitka formulare pres celou sirku, hlavni akce nahore */
+    .tlacitka-formulare {
+        flex-direction: column-reverse;
+    }
+    .tlacitka-formulare button.btn {
+        width: 100%;
+    }
+    /* Tuzky blize textu (okno ma mensi okraj) */
+    button.btn-tuzka {
+        left: -1.6rem;
+    }
+    /* Akce u podukolu vetsi pro prst */
+    button.podukol-akce {
+        width: 2.25rem;
+        height: 2.25rem;
+        margin-top: -0.35rem;
+    }
+    .podukol {
+        gap: 0.4rem;
+        padding-left: 0.25rem;
+        padding-right: 0.1rem;
+    }
+
+    /* Karty prihlaseni, registrace a uctu - mensi okraje */
+    .list-papiru {
+        padding: 1.75rem 1.1rem 1.25rem;
+    }
+    /* Oznameni nad kulatym tlacitkem */
+    .oznameni {
+        bottom: calc(5.75rem + env(safe-area-inset-bottom));
+        width: calc(100vw - 1.5rem);
+        justify-content: space-between;
+    }
+}
+
+/* Vyjeti spodniho listu zdola */
+@keyframes vyjeti-zdola {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+/* Velmi uzke telefony (360 px a mene) */
+@media (max-width: 380px) {
+    .nadpis-app {
+        font-size: 2.6rem;
+    }
+    .nadpis-mesice {
+        font-size: 1.55rem;
+    }
+    /* Mensi tlacitka se sipkami, at se rada vejde */
+    button.btn-sipka {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
+    #btn-dnes {
+        padding: 0.5rem 0.7rem;
+    }
+    .hlavicka-dnu {
+        font-size: 1rem;
+    }
+    .bunka-dne {
+        min-height: 3.2rem;
+    }
+    .cislo-dne {
+        font-size: 1.05rem;
+        width: 1.6rem;
+        height: 1.6rem;
+    }
+}
+
+/* Uzivatele, kteri si v systemu vypnuli animace, je neuvidi
+   (zustanou jen okamzite zmeny; nacitaci kolecko se toci pomalu, aby bylo jasne, ze se ceka) */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    .nacitani {
+        animation-duration: 2.5s !important;
+        animation-iteration-count: infinite !important;
+    }
+}
